@@ -7,12 +7,7 @@ import type { Env } from '../config/env.js';
 import type { Mailer, OutgoingEmail } from './mailer.js';
 
 /** What lands in the outbox directory, one JSON file per message. */
-export type OutboxEntry = Omit<OutgoingEmail, 'attachments'> & {
-  from: string;
-  sentAt: string;
-  /** The inline images, without their bytes, so the file stays readable. */
-  attachments: { filename: string; contentType: string; cid: string; size: number }[];
-};
+export type OutboxEntry = OutgoingEmail & { from: string; sentAt: string };
 
 /**
  * Development and test transport: every message becomes a JSON file in `EMAIL_OUTBOX_DIR`.
@@ -32,18 +27,7 @@ export class OutboxMailer implements Mailer {
 
   async send(email: OutgoingEmail): Promise<void> {
     await mkdir(this.dir, { recursive: true });
-    const { attachments = [], ...rest } = email;
-    const entry: OutboxEntry = {
-      from: this.from,
-      ...rest,
-      attachments: attachments.map(({ filename, contentType, cid, content }) => ({
-        filename,
-        contentType,
-        cid,
-        size: content.length,
-      })),
-      sentAt: new Date().toISOString(),
-    };
+    const entry: OutboxEntry = { from: this.from, ...email, sentAt: new Date().toISOString() };
     const file = path.join(this.dir, `${Date.now()}-${randomUUID()}.json`);
     await writeFile(file, JSON.stringify(entry, null, 2));
     this.logger.log({ to: email.to, subject: email.subject, file }, 'Email written to the outbox');

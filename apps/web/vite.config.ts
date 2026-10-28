@@ -11,8 +11,22 @@ const apiProxy = {
   '/socket.io': { target: API_PROXY_TARGET, ws: true },
 };
 
-// Long-lived framework code gets its own chunk so it caches across releases.
-const REACT_PACKAGES = ['react', 'react-dom', 'scheduler', 'react-router'];
+// Long-lived framework code gets its own chunk so it caches across releases. The small runtimes
+// every screen needs (the theme, lucide's icon factory but not the icons, the class-name
+// helpers) ride with it: left to the bundler, they land in a chunk of their own whenever a lazy
+// chunk's imports change shape, and the glue of one more initial file is what then breaks the
+// first-paint budget.
+const REACT_PACKAGES = [
+  'react',
+  'react-dom',
+  'scheduler',
+  'react-router',
+  'next-themes',
+  'clsx',
+  'tailwind-merge',
+];
+const isIconRuntime = (id: string): boolean =>
+  id.includes('/node_modules/lucide-react/') && !id.includes('/icons/');
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -28,6 +42,7 @@ export default defineConfig({
         manualChunks(id) {
           if (!id.includes('node_modules')) return undefined;
           if (REACT_PACKAGES.some((name) => id.includes(`/node_modules/${name}/`))) return 'react';
+          if (isIconRuntime(id)) return 'react';
           if (id.includes('socket.io') || id.includes('engine.io')) return 'socket';
           return undefined;
         },

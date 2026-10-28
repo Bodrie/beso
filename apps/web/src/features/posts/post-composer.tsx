@@ -13,7 +13,7 @@ import { AttachmentPreview } from '@/features/uploads/attachment-preview';
 import { useImageUploads } from '@/features/uploads/use-image-uploads';
 import { isApiClientError } from '@/lib/api/client';
 import { firstName } from '@/lib/names';
-import { EmojiPickerButton } from './emoji-picker-button';
+import { EmojiPickerButton } from '@/features/emoji/emoji-picker-button';
 import { insertText } from './insert-text';
 import type { PollDraft } from './poll-editor';
 import { useCreatePost } from './use-post-mutations';

@@ -24,7 +24,8 @@ const isWide = (handle: unknown): boolean =>
 /**
  * Header plus a three-column layout. The left navigation appears from `lg`, the
  * right bar from `xl`; routes with `handle: { wide: true }` (messages) take the
- * whole middle and drop the right bar. Sidebars taller than the viewport scroll on their
+ * whole middle, drop the right bar and, below `md`, get the screen edge to edge: the chat
+ * is the page there and a frame around it was wasted space. Sidebars taller than the viewport scroll on their
  * own instead of being cut off. After a navigation that started outside the
  * main area (header, left bar), focus moves to the new page content.
  */
@@ -53,7 +54,9 @@ export function AppShell() {
       <div
         className={cn(
           'mx-auto grid max-w-7xl grid-cols-1 gap-6 px-4 py-6 lg:grid-cols-[220px_minmax(0,1fr)]',
-          !wide && 'xl:grid-cols-[220px_minmax(0,1fr)_320px]',
+          wide
+            ? 'max-md:gap-0 max-md:px-0 max-md:py-0'
+            : 'xl:grid-cols-[220px_minmax(0,1fr)_320px]',
         )}
       >
         <div className="hidden lg:block">

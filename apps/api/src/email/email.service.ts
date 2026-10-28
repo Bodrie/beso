@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Env } from '../config/env.js';
-import { markAttachment } from './brand.js';
+import { type MailLogo, mailLogo } from './brand.js';
 import { MAILER, type Mailer } from './mailer.js';
 import {
   type EmailContent,
@@ -21,37 +21,45 @@ export const CHANGE_EMAIL_TTL_MS = 24 * 60 * 60 * 1000;
 
 type Recipient = { email: string; name: string };
 
-/** Composes the messages we send; links point at the web app (`WEB_URL`). */
+/** Composes the messages we send; links and the logo point at the web app (`WEB_URL`). */
 @Injectable()
 export class EmailService {
   private readonly webUrl: string;
+  private readonly logo: MailLogo;
 
   constructor(
     @Inject(MAILER) private readonly mailer: Mailer,
     config: ConfigService<Env, true>,
   ) {
     this.webUrl = config.get('WEB_URL', { infer: true }).replace(/\/+$/, '');
+    this.logo = mailLogo(this.webUrl);
   }
 
   sendVerification(to: Recipient, token: string): Promise<void> {
     return this.send(
       to,
-      verificationEmail({
-        name: to.name,
-        link: this.link('/verify-email', token),
-        hours: VERIFY_EMAIL_TTL_MS / 3_600_000,
-      }),
+      verificationEmail(
+        {
+          name: to.name,
+          link: this.link('/verify-email', token),
+          hours: VERIFY_EMAIL_TTL_MS / 3_600_000,
+        },
+        this.logo,
+      ),
     );
   }
 
   sendPasswordReset(to: Recipient, token: string): Promise<void> {
     return this.send(
       to,
-      passwordResetEmail({
-        name: to.name,
-        link: this.link('/reset-password', token),
-        minutes: PASSWORD_RESET_TTL_MS / 60_000,
-      }),
+      passwordResetEmail(
+        {
+          name: to.name,
+          link: this.link('/reset-password', token),
+          minutes: PASSWORD_RESET_TTL_MS / 60_000,
+        },
+        this.logo,
+      ),
     );
   }
 
@@ -59,7 +67,7 @@ export class EmailService {
   sendPasswordChanged(to: Recipient): Promise<void> {
     return this.send(
       to,
-      passwordChangedEmail({ name: to.name, link: `${this.webUrl}/forgot-password` }),
+      passwordChangedEmail({ name: to.name, link: `${this.webUrl}/forgot-password` }, this.logo),
     );
   }
 
@@ -67,11 +75,14 @@ export class EmailService {
   sendEmailChangeConfirm(to: Recipient, token: string): Promise<void> {
     return this.send(
       to,
-      emailChangeConfirmEmail({
-        name: to.name,
-        link: this.link('/confirm-email', token),
-        hours: CHANGE_EMAIL_TTL_MS / 3_600_000,
-      }),
+      emailChangeConfirmEmail(
+        {
+          name: to.name,
+          link: this.link('/confirm-email', token),
+          hours: CHANGE_EMAIL_TTL_MS / 3_600_000,
+        },
+        this.logo,
+      ),
     );
   }
 
@@ -79,11 +90,14 @@ export class EmailService {
   sendEmailChangeNotice(to: Recipient, newEmail: string): Promise<void> {
     return this.send(
       to,
-      emailChangeNoticeEmail({
-        name: to.name,
-        newEmail,
-        link: `${this.webUrl}/forgot-password`,
-      }),
+      emailChangeNoticeEmail(
+        {
+          name: to.name,
+          newEmail,
+          link: `${this.webUrl}/forgot-password`,
+        },
+        this.logo,
+      ),
     );
   }
 
@@ -91,13 +105,16 @@ export class EmailService {
   sendEmailChanged(to: Recipient, newEmail: string): Promise<void> {
     return this.send(
       to,
-      emailChangedEmail({ name: to.name, newEmail, link: `${this.webUrl}/forgot-password` }),
+      emailChangedEmail(
+        { name: to.name, newEmail, link: `${this.webUrl}/forgot-password` },
+        this.logo,
+      ),
     );
   }
 
   /** Sent after the account is gone; the address is the only thing we still know. */
   sendAccountDeleted(to: Recipient): Promise<void> {
-    return this.send(to, accountDeletedEmail({ name: to.name }));
+    return this.send(to, accountDeletedEmail({ name: to.name }, this.logo));
   }
 
   /**
@@ -111,24 +128,26 @@ export class EmailService {
   ): Promise<void> {
     return this.send(
       to,
-      unverifiedExpiryEmail({
-        name: to.name,
-        link: this.link('/verify-email', token),
-        hours: VERIFY_EMAIL_TTL_MS / 3_600_000,
-        afterDays: removal.afterDays,
-        removalDate: removal.on.toLocaleDateString('en-GB', {
-          day: 'numeric',
-          month: 'long',
-          year: 'numeric',
-          timeZone: 'UTC',
-        }),
-      }),
+      unverifiedExpiryEmail(
+        {
+          name: to.name,
+          link: this.link('/verify-email', token),
+          hours: VERIFY_EMAIL_TTL_MS / 3_600_000,
+          afterDays: removal.afterDays,
+          removalDate: removal.on.toLocaleDateString('en-GB', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+            timeZone: 'UTC',
+          }),
+        },
+        this.logo,
+      ),
     );
   }
 
-  /** Every mail carries the mark the layout shows in its header. */
   private send(to: Recipient, content: EmailContent): Promise<void> {
-    return this.mailer.send({ to: to.email, ...content, attachments: [markAttachment()] });
+    return this.mailer.send({ to: to.email, ...content });
   }
 
   private link(path: string, token: string): string {

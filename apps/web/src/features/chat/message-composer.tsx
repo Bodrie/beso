@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 import { CharacterCounter } from '@/components/character-counter';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { EmojiPickerButton } from '@/features/posts/emoji-picker-button';
+import { EmojiPickerButton } from '@/features/emoji/emoji-picker-button';
 import { insertText } from '@/features/posts/insert-text';
 import { AttachmentPreview } from '@/features/uploads/attachment-preview';
 import { useImageUpload } from '@/features/uploads/use-image-upload';

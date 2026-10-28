@@ -150,9 +150,12 @@ catalogs:
     dotenv:
       specifier: 18.0.8
       version: 18.0.8
-    emoji-picker-react:
-      specifier: 4.22.3
-      version: 4.22.3
+    emojibase-data:
+      specifier: 18.0.0
+      version: 18.0.0
+    frimousse:
+      specifier: 0.4.0
+      version: 0.4.0
     helmet:
       specifier: 8.3.0
       version: 8.3.0
@@ -497,9 +500,12 @@ importers:
       dayjs:
         specifier: 'catalog:'
         version: 1.11.23
-      emoji-picker-react:
+      emojibase-data:
         specifier: 'catalog:'
-        version: 4.22.3(react@19.3.1)
+        version: 18.0.0(emojibase@18.0.0)
+      frimousse:
+        specifier: 'catalog:'
+        version: 0.4.0(react@19.3.1)(typescript@6.0.3)
       lucide-react:
         specifier: 'catalog:'
         version: 1.57.0(@types/react@19.3.0)(react@19.3.1)
@@ -4071,12 +4077,6 @@ packages:
   elkjs@0.11.1:
     resolution: {integrity: sha512-zxxR9k+rx5ktMwT/FwyLdPCrq7xN6e4VGGHH8hA01vVYKjTFik7nHOxBnAYtrgYUB1RpAiLvA1/U2YraWxyKKg==}
 
-  emoji-picker-react@4.22.3:
-    resolution: {integrity: sha512-jrAkkoN69l5lA2Xp6P5axqoK1YdHNS1+MKMlLxwltnnnaXrojUjZaolgI/U8vdx8vFWqG42yYqpLSR83f6pwiw==}
-    engines: {node: '>=10'}
-    peerDependencies:
-      react: '>=16.8'
-
   emoji-regex@10.6.0:
     resolution: {integrity: sha512-toUI84YS5YmxW219erniWD0CIVOo46xGKColeNQRgOzDorgBi1v4D71/OFzgD9GO2UGKIv1C3Sp8DAn0+j5w7A==}
 
@@ -4085,6 +4085,15 @@ packages:
 
   emoji-regex@9.2.2:
     resolution: {integrity: sha512-L18DaJsXSUk2+42pv8mLs5jJT2hqFkFE4j21wOmgbUqsZ2hL72NsUU785g9RXgo3s0ZNgVl42TiHp3ZtOv/Vyg==}
+
+  emojibase-data@18.0.0:
+    resolution: {integrity: sha512-TPPRRYv2zPd0jKI+pTpMquwWNZXYAsC3IVsCMeg2X8y8fEzKwOks4/5bz0YavF5r6d71aGPpb6oDnUEwSLLMoA==}
+    peerDependencies:
+      emojibase: '*'
+
+  emojibase@18.0.0:
+    resolution: {integrity: sha512-5PG+EEt5zQ9qvqdHZw61+T9iz96g+r621QS/w8jEzPg+3mjzAdjl8LPLc+e9ABv/yboNfMwEair7aK9qKnwAbQ==}
+    engines: {node: '>=20.0.0'}
 
   emojilib@2.4.0:
     resolution: {integrity: sha512-5U0rVMU5Y2n2+ykNLQqMoqklN9ICBT/KsvC1Gz6vqHbz2AXXGkG+Pm5rMWk/8Vjrr/mY9985Hi8DYzn1F09Nyw==}
@@ -4272,6 +4281,15 @@ packages:
   fresh@2.0.0:
     resolution: {integrity: sha512-Rx/WycZ60HOaqLKAi6cHRKKI7zxWbJ31MhntmtwMoaTeF7XFH9hhBp8vITaMidfljRQ6eYWCKkaTK+ykVJHP2A==}
     engines: {node: '>= 0.8'}
+
+  frimousse@0.4.0:
+    resolution: {integrity: sha512-wA/1Xt9UTk51wYNpy+EvHKPUA4jdm4NuEFzSNNZxqT0Nxrj4RFwYByjRMuaq4qSLOco/ikDCpLKesB8W1w2q+Q==}
+    peerDependencies:
+      react: ^18 || ^19
+      typescript: '>=5.1.0'
+    peerDependenciesMeta:
+      typescript:
+        optional: true
 
   fs-constants@1.0.0:
     resolution: {integrity: sha512-y6OAwoSIf7FyjMIv94u+b5rdheZEjzR63GTyZJm5qh4Bi+2YgwLCcI/fPFZkL5PSixOt6ZNKm+w+Hfp/Bciwow==}
@@ -5462,9 +5480,6 @@ packages:
   shebang-regex@3.0.0:
     resolution: {integrity: sha512-7++dFhtcx3353uBaq8DDR4NuxBetBzC7ZQOhmTQInHEd6bSrXdiEyzCvG07Z44UYdLShWUyXt5M/yhz8ekcb1A==}
     engines: {node: '>=8'}
-
-  shipstyles@1.0.0:
-    resolution: {integrity: sha512-1AcihfXo/mSxqeOdoKqq/5TNv+vSH0dBYPFq88PUX5FBkK5pRmY5TP9SuMNio85PQ+euUI67+KpSVk1cUVDCgA==}
 
   side-channel-list@1.0.1:
     resolution: {integrity: sha512-mjn/0bi/oUURjc5Xl7IaWi/OJJJumuoJFQJfDDyO46+hBWsfaVM65TBHq2eoZBhzl9EchxOijpkbRC8SVBQU0w==}
@@ -9191,16 +9206,17 @@ snapshots:
 
   elkjs@0.11.1: {}
 
-  emoji-picker-react@4.22.3(react@19.3.1):
-    dependencies:
-      react: 19.3.1
-      shipstyles: 1.0.0
-
   emoji-regex@10.6.0: {}
 
   emoji-regex@8.0.0: {}
 
   emoji-regex@9.2.2: {}
+
+  emojibase-data@18.0.0(emojibase@18.0.0):
+    dependencies:
+      emojibase: 18.0.0
+
+  emojibase@18.0.0: {}
 
   emojilib@2.4.0: {}
 
@@ -9444,6 +9460,12 @@ snapshots:
   forwarded@0.2.0: {}
 
   fresh@2.0.0: {}
+
+  frimousse@0.4.0(react@19.3.1)(typescript@6.0.3):
+    dependencies:
+      react: 19.3.1
+    optionalDependencies:
+      typescript: 6.0.3
 
   fs-constants@1.0.0: {}
 
@@ -10646,8 +10668,6 @@ snapshots:
       shebang-regex: 3.0.0
 
   shebang-regex@3.0.0: {}
-
-  shipstyles@1.0.0: {}
 
   side-channel-list@1.0.1:
     dependencies:

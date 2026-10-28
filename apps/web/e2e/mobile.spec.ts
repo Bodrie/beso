@@ -21,6 +21,15 @@ test.describe('on a phone', () => {
     await dialog.getByRole('button', { name: /Bob Brown/ }).click();
     await expect(carol).toHaveURL(/\/messages\/[0-9a-f-]{36}$/);
     await expect(carol.getByRole('link', { name: 'Back to conversations' })).toBeVisible();
+    // The conversation is the whole screen under the header: as wide as the header (the viewport
+    // less the scrollbar gutter headless Chromium reserves; a phone has none), starting where it
+    // ends and reaching the bottom, with no frame or padding around it.
+    const header = await carol.getByRole('banner').boundingBox();
+    const panel = await carol.getByRole('region', { name: 'Conversation' }).boundingBox();
+    if (!header || !panel) throw new Error('The header or the conversation has no box');
+    expect(panel).toMatchObject({ x: 0, width: header.width });
+    expect(panel.y).toBeCloseTo(header.y + header.height, 0);
+    expect(panel.y + panel.height).toBeCloseTo(844, 0);
     const text = `Hi from a phone ${Date.now()}`;
     await carol.getByRole('textbox', { name: `Message ${USERS.bob.name}` }).fill(text);
     await carol.keyboard.press('Enter');

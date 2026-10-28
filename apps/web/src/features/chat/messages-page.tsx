@@ -12,16 +12,18 @@ import { useConversations } from './use-conversations';
 
 /**
  * Two panes from `md` up; on phones the list and the thread take turns. The panel fills what
- * the header (3.5rem and its 1px border) and the shell's padding (2 × 1.5rem) leave, to the
- * pixel: one more and the page itself scrolls under the thread. Short enough for the space
- * above a phone's keyboard, which shrinks the viewport (`interactive-widget` in index.html).
+ * the header (3.5rem and its 1px border) leaves, to the pixel: one more and the page itself
+ * scrolls under the thread. On a phone that is the whole screen, edge to edge (the shell drops
+ * its padding for it below `md`); from `md` it is a card inside the shell's padding (2 ×
+ * 1.5rem). Short enough for the space above a phone's keyboard, which shrinks the viewport
+ * (`interactive-widget` in index.html).
  */
 export function MessagesPage() {
   const { conversationId, username } = useParams();
   const threadOpen = Boolean(conversationId ?? username);
 
   return (
-    <div className="bg-card flex h-[calc(100svh-6.5rem-1px)] min-h-60 overflow-hidden rounded-xl border shadow-sm">
+    <div className="bg-card flex h-[calc(100svh-3.5rem-1px)] min-h-60 overflow-hidden md:h-[calc(100svh-6.5rem-1px)] md:rounded-xl md:border md:shadow-sm">
       <aside
         aria-label="Conversations"
         className={cn('w-full shrink-0 border-r md:w-80', threadOpen ? 'hidden md:block' : 'block')}

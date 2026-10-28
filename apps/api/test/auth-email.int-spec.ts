@@ -54,11 +54,8 @@ describe('email verification and password reset', () => {
       const mail = await waitForEmail(member.email, VERIFY_SUBJECT);
       expect(mail.text).toContain(`Hi ${member.name}`);
       expect(mail.text).toContain('http://localhost:5173/verify-email?token=');
-      // The mark rides along inline: the HTML shows the attachment, nothing is fetched.
-      expect(mail.attachments).toEqual([
-        expect.objectContaining({ cid: 'beso-mark', contentType: 'image/png' }),
-      ]);
-      expect(mail.html).toContain('src="cid:beso-mark"');
+      // The logo is the picture the web app serves, never an attachment.
+      expect(mail.html).toContain('src="http://localhost:5173/mail-logo.png"');
 
       // The session exists, but only the verification routes answer.
       expect(

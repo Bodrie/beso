@@ -41,3 +41,21 @@ Since the pre-release review (M1) the address was read-only: a mistyped address 
 - Precise IPs are still stored with the refresh tokens as before (and leave with them); only masked ones are shown.
 - The expired-token reaper (ADR 0012 amendment) covers the new kind; `pending_email` is not unique, so two members may ask for the same address and the second confirmation loses.
 - Settings tests must seed `mockDb.sessions`; Playwright's Desktop Chrome device sees itself as "Chrome on Windows".
+
+## Amendment 2026-10-28: the mail logo is a hosted picture
+
+### Context
+
+Since 2026-10-22 every mail carried the wordmark as an inline attachment (`cid:`), so that nothing was fetched and nothing could track the reader. The owner then saw a mail without its logo. Two things take an inline picture away and neither is ours to fix: some webmail (and Resend's own preview of a sent mail) drop `cid:` pictures, and a client in dark mode (Gmail on Android above all) turns the light HTML dark and leaves pictures alone, so dark letters on a transparent PNG disappear.
+
+### Decision
+
+- **The logo is a static file of the web app**, `apps/web/public/mail-logo.png`, written by `pnpm brand` together with `apps/api/src/email/mail-logo.ts` (its path and CSS size); the layout links to `${WEB_URL}/mail-logo.png` (`mailLogo(webUrl)` in `email/brand.ts`, handed to every template). The file carries nothing about the reader, so nothing is tracked through it; a client that blocks remote pictures shows the name (`alt`) instead.
+- **The picture is the wordmark on a white tile** with the card's border, baked into the PNG, so it reads on a page a client has turned dark.
+- **Mails carry no attachments any more**: `OutgoingEmail` lost `attachments`; an outbox entry is the message as sent.
+
+### Consequences
+
+- A mail is 10 kB lighter, and its logo shows in Resend's preview and in every webmail.
+- Clients that block remote pictures (Outlook for unknown senders, Thunderbird) show "BeSo" as text where the logo would be, as with every other service's mail.
+- The web image must ship the file: `pnpm brand` writes both sides, and `email/templates.spec.ts` fails when the API's size and the web's file disagree.

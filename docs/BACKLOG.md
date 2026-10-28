@@ -47,3 +47,4 @@ From the ideas round that produced Track F of `IMPLEMENTATION_PLAN.md` (the newc
 - **Games beyond F6**: ratings and leaderboards; checkers, backgammon, a daily word puzzle, battleship (listed in F6 as the later games).
 - **Stories**: highlights that outlive the 24 hours; video (needs Cloudflare Stream or R2, not the box).
 - **Calls**: group calls and live audio rooms (a media server: LiveKit or Jitsi, managed or with open ports).
+- **Emoji** (ADR 0023, 2026-10-28): a skin tone preference in `users.settings` (frimousse has the selector); an in-place emoji panel on phones at the keyboard's measured height, as Telegram Web does it, should the keyboard's own panel not be enough.

@@ -16,14 +16,15 @@
     "e2e:ui": "playwright test --ui"
   },
   "dependencies": {
+    "@beso/shared": "workspace:*",
     "@fontsource-variable/inter": "catalog:",
     "@hookform/resolvers": "catalog:",
     "@tanstack/react-query": "catalog:",
-    "@beso/shared": "workspace:*",
     "class-variance-authority": "catalog:",
     "cn": "catalog:",
     "dayjs": "catalog:",
-    "emoji-picker-react": "catalog:",
+    "emojibase-data": "catalog:",
+    "frimousse": "catalog:",
     "lucide-react": "catalog:",
     "next-themes": "catalog:",
     "radix-ui": "catalog:",

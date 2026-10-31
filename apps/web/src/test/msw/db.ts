@@ -65,6 +65,8 @@ export const mockDb = {
   lastUpload: null as { name: string; type: string; size: number } | null,
   /** Which file became which key (uploads run in parallel, so their order is not the keys'). */
   uploadedNames: new Map<string, string>(),
+  /** The length the fake API "read" from each voice upload, by key. */
+  voiceDurations: new Map<string, number>(),
   /** Links the fake API "mailed"; tests read the token here instead of an inbox. */
   emailTokens: [] as { token: string; kind: 'verify' | 'reset' | 'change'; email: string }[],
   /** The signed-in user's devices, as GET /auth/sessions lists them. */
@@ -125,6 +127,7 @@ export function resetMockDb(): void {
   mockDb.uploads = 0;
   mockDb.lastUpload = null;
   mockDb.uploadedNames = new Map();
+  mockDb.voiceDurations = new Map();
   mockDb.emailTokens = [];
   mockDb.sessions = [];
   mockDb.lastRegistration = null;

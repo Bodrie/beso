@@ -162,6 +162,36 @@ reader's other tabs lower their badge (review L9).
   (no Save button) and the thread reads "Alice changed the group picture". A picture at group
   creation is not offered yet (`BACKLOG.md`).
 
+## Amendment 2026-10-31: voice messages (owner's request, R12)
+
+- **A message can be a voice clip**, alone: no text, picture or post with it, though it may
+  answer another message. The browser encodes it: the microphone goes through Web Audio into
+  libopus compiled to WebAssembly (`opus-recorder`, loaded on the first press of the
+  microphone), mono Opus at 32 kbps in an Ogg container, and an analyser beside it measures the
+  loudness that becomes the live meter and the waveform. Half a minute at most; the recorder
+  stops itself there. The API never decodes or re-encodes audio: `POST /uploads/voice` (kind
+  `voice`, keys `voice/<uuid>.ogg`, `VoiceProcessor`) checks the magic bytes and the Opus
+  identification header, caps the size at a megabyte and reads the length from the last page's
+  granule position, refusing anything over the limit; the row keeps `uploads.duration_ms`.
+- **Shape.** `sendMessageSchema.voiceKey` (an own upload of the voice kind, exclusive with
+  text, `imageKey` and `postId`) and `voicePeaks` (up to 64 values between 0 and 1); migration
+  `voice_messages` adds `messages.voice_key` (SET NULL, like the picture) and `voice_peaks`.
+  The message answers `voice: { url, durationMs, peaks } | null`; the reply quote, the list
+  snippet, the push and the announcement say "Voice message"; the export carries `voiceUrl`.
+  A voice message cannot be edited; deleting it discards the file as a picture's is.
+- **Playing.** One clip plays at a time across the app (`voicePlayer`, one audio element):
+  starting another stops the current one, and a thread leaving the screen stops its clip. The
+  bubble (`VoiceNote`) shows play or pause, the waveform filling as it plays (a slider for the
+  keyboard and assistive technology: the arrows seek a second, with Shift five) and the time
+  left. Where the browser cannot play Ogg Opus the bubble offers the file to download instead;
+  Safari is expected to be that browser until it is checked on a real iPhone, after which the
+  fallback is `opus-recorder`'s decoder through Web Audio (`BACKLOG.md`).
+- **Composer.** A microphone button (shown only where recording is possible, disabled while a
+  picture is attached) turns the row into a recording bar with cancel, timer, meter and stop;
+  the finished clip uploads at once and shows as a preview to listen to, discard or send, the
+  way a picture does. Phones need the audio context created inside the tap, so the recorder
+  creates it before anything awaits.
+
 ## Consequences
 
 - The web client addresses threads by conversation id (`/messages/:conversationId`); `/messages/with/:username` resolves a person to their direct thread and redirects. Member lists, per-member read receipts and multi-person typing all derive from the conversation's `members`; a group's avatar is its own picture when an admin set one (amendment 2026-10-31), a tile otherwise.

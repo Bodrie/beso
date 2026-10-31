@@ -19,8 +19,12 @@ import {
   putInList,
 } from './use-conversations';
 
-/** A message as the thread shows it; `status` and `imageKey` only exist on optimistic copies. */
-export type ThreadMessage = Message & { status?: 'sending' | 'failed'; imageKey?: string };
+/** A message as the thread shows it; `status` and the keys only exist on optimistic copies. */
+export type ThreadMessage = Message & {
+  status?: 'sending' | 'failed';
+  imageKey?: string;
+  voiceKey?: string;
+};
 type ThreadPages = Pages<ThreadMessage>;
 
 /**
@@ -45,6 +49,7 @@ export function appendToThread(
               item.senderId === message.senderId &&
               item.content === message.content &&
               (item.image === null) === (message.image === null) &&
+              (item.voice === null) === (message.voice === null) &&
               (item.sharedPost === null) === (message.sharedPost === null) &&
               (item.replyTo === null) === (message.replyTo === null),
           );

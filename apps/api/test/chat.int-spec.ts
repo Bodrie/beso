@@ -13,6 +13,7 @@ import {
   revisionListSchema,
   typingUpdateSchema,
   uploadResponseSchema,
+  voiceUploadResponseSchema,
 } from '@beso/shared';
 import { JwtService } from '@nestjs/jwt';
 import sharp from 'sharp';
@@ -31,6 +32,7 @@ import {
   until,
   waitFor,
 } from './setup/sockets.js';
+import { fakeOpusFile } from './setup/ogg.js';
 
 function png(): Promise<Buffer> {
   return sharp({ create: { width: 320, height: 200, channels: 3, background: '#3366aa' } })
@@ -410,6 +412,92 @@ describe('chat', () => {
       .send({ imageKey: bobsPicture.key })
       .expect(400);
     expect(apiErrorSchema.parse(notMine.body).fields).toEqual({ imageKey: 'Unknown upload' });
+  });
+
+  it('sends voice messages: Opus the browser encoded, alone, at most 30 seconds', async () => {
+    const aliceSocket = connect(t, { token: aliceSession.token });
+    const bobSocket = connect(t, { token: bobSession.token });
+    sockets.push(aliceSocket, bobSocket);
+    await Promise.all([connected(aliceSocket), connected(bobSocket)]);
+    const direct = await directWith(aliceSession.agent, bob.id);
+    const uploadVoice = (agent: TestAgent, file: Buffer) =>
+      agent.post('/api/v1/uploads/voice').attach('file', file, 'voice.ogg');
+
+    // The length comes from the file, and the file comes back as audio.
+    const clip = voiceUploadResponseSchema.parse(
+      (await uploadVoice(aliceSession.agent, fakeOpusFile(3000)).expect(201)).body,
+    );
+    expect(clip.key).toMatch(/^voice\/.*\.ogg$/);
+    expect(clip.durationMs).toBe(3000);
+    const served = await request(t.server).get(`/api/v1/uploads/${clip.key}`).expect(200);
+    expect(served.headers['content-type']).toMatch(/^audio\/ogg/);
+    await request(t.server)
+      .get(`/api/v1/uploads/${clip.key.replace('.ogg', '.webp')}`)
+      .expect(404);
+
+    // Too long, or not Ogg Opus at all.
+    const tooLong = await uploadVoice(aliceSession.agent, fakeOpusFile(30_001)).expect(400);
+    expect(apiErrorSchema.parse(tooLong.body).fields).toHaveProperty('file');
+    await uploadVoice(aliceSession.agent, await png()).expect(415);
+
+    // Sent over the socket with its waveform; everyone gets the clip as the message.
+    const peaks = [0.1, 0.6, 1, 0.4];
+    const bobReceives = waitFor<unknown>(bobSocket, SOCKET_EVENTS.messageNew);
+    const ack = messageAckSchema.parse(
+      await aliceSocket.emitWithAck(SOCKET_EVENTS.messageSend, {
+        conversationId: direct.id,
+        voiceKey: clip.key,
+        voicePeaks: peaks,
+      }),
+    );
+    expect(ack.ok).toBe(true);
+    if (!ack.ok) return;
+    const voice = { url: clip.url, durationMs: 3000, peaks };
+    expect(ack.message).toMatchObject({ content: '', image: null, voice });
+    expect(messageSchema.parse(await bobReceives).voice).toEqual(voice);
+    expect((await listFor(bobSession.agent)).items[0]?.lastMessage?.voice).toEqual(voice);
+
+    // Alone: no text or picture with it; only an own upload of the voice kind.
+    const withText = messageAckSchema.parse(
+      await aliceSocket.emitWithAck(SOCKET_EVENTS.messageSend, {
+        conversationId: direct.id,
+        voiceKey: clip.key,
+        content: 'and this',
+      }),
+    );
+    expect(withText).toMatchObject({
+      ok: false,
+      error: { code: 'VALIDATION_ERROR', fields: { voiceKey: expect.any(String) } },
+    });
+    const picture = await uploadPicture(aliceSession.agent, 'message');
+    const wrongKind = await aliceSession.agent
+      .post(`/api/v1/conversations/${direct.id}/messages`)
+      .send({ voiceKey: picture.key })
+      .expect(400);
+    expect(apiErrorSchema.parse(wrongKind.body).fields).toHaveProperty('voiceKey');
+    const bobsClip = voiceUploadResponseSchema.parse(
+      (await uploadVoice(bobSession.agent, fakeOpusFile(1000)).expect(201)).body,
+    );
+    const notMine = await aliceSession.agent
+      .post(`/api/v1/conversations/${direct.id}/messages`)
+      .send({ voiceKey: bobsClip.key })
+      .expect(400);
+    expect(apiErrorSchema.parse(notMine.body).fields).toEqual({ voiceKey: 'Unknown upload' });
+
+    // No text to edit; deleting takes the file with it.
+    await aliceSession.agent
+      .patch(`/api/v1/conversations/${direct.id}/messages/${ack.message.id}`)
+      .send({ content: 'words' })
+      .expect(400);
+    const deleted = messageSchema.parse(
+      (
+        await aliceSession.agent
+          .delete(`/api/v1/conversations/${direct.id}/messages/${ack.message.id}`)
+          .expect(200)
+      ).body,
+    );
+    expect(deleted.voice).toBeNull();
+    await request(t.server).get(`/api/v1/uploads/${clip.key}`).expect(404);
   });
 
   it('relays typing to the other members only and drops bad or foreign signals', async () => {

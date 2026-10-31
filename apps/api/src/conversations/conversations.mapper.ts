@@ -17,6 +17,9 @@ export const messageSelect = {
   content: true,
   imageKey: true,
   image: { select: storedImageSelect },
+  voiceKey: true,
+  voice: { select: { key: true, durationMs: true } },
+  voicePeaks: true,
   sharedPostId: true,
   sharesPost: true,
   isReply: true,
@@ -27,6 +30,7 @@ export const messageSelect = {
       senderId: true,
       content: true,
       imageKey: true,
+      voiceKey: true,
       sharesPost: true,
       deletedAt: true,
     },
@@ -52,7 +56,13 @@ function replyOf(row: MessageRow): Message['replyTo'] {
     id: original.id,
     senderId: original.senderId,
     excerpt: quoted(original.content),
-    attachment: original.imageKey ? 'picture' : original.sharesPost ? 'post' : null,
+    attachment: original.imageKey
+      ? 'picture'
+      : original.voiceKey
+        ? 'voice'
+        : original.sharesPost
+          ? 'post'
+          : null,
     deleted: original.deletedAt !== null,
   };
 }
@@ -72,6 +82,13 @@ export function toMessage(row: MessageRow, assetsBase: string): Message {
     kind: row.kind,
     content: row.content,
     image: row.image ? toStoredImage(row.image, assetsBase) : null,
+    voice: row.voice
+      ? {
+          url: `${assetsBase}/${row.voice.key}`,
+          durationMs: row.voice.durationMs ?? 1,
+          peaks: row.voicePeaks,
+        }
+      : null,
     imageUrl: row.image ? `${assetsBase}/${row.image.key}` : null,
     sharedPost: row.sharedPostId
       ? { id: row.sharedPostId }

@@ -89,6 +89,8 @@ import { PresenceDot } from './presence-dot';
 import { TypingIndicator } from './typing-indicator';
 import { useDeleteMessage, useMessages } from './use-conversations';
 import { useEditMessage, useReactToMessage } from './use-message-actions';
+import { VoiceNote } from './voice/voice-note';
+import { voicePlayer } from './voice/voice-player';
 
 const GROUP_GAP_MS = 5 * 60 * 1000;
 const NEAR_BOTTOM_PX = 80;
@@ -130,6 +132,8 @@ export function Thread({ conversation, embedded = false, className }: ThreadProp
   const typing = typingText(typingNames);
 
   useEffect(() => activateConversation(conversation.id), [activateConversation, conversation.id]);
+  // A voice message playing in this thread stops when the thread leaves the screen.
+  useEffect(() => () => voicePlayer.stopConversation(conversation.id), [conversation.id]);
 
   // Whatever is still unread gets marked once the thread is on screen.
   const hasUnread = conversation.unreadCount > 0;
@@ -263,6 +267,8 @@ export function Thread({ conversation, embedded = false, className }: ThreadProp
         : null,
       imageUrl: outgoing.previewUrl ?? null,
       imageKey: outgoing.imageKey,
+      voice: outgoing.voice ?? null,
+      voiceKey: outgoing.voiceKey,
       sharedPost: null,
       replyTo: outgoing.replyTo ?? null,
       editedAt: null,
@@ -278,12 +284,15 @@ export function Thread({ conversation, embedded = false, className }: ThreadProp
       const message = await chat.sendMessage(conversation.id, {
         content: outgoing.content,
         imageKey: outgoing.imageKey,
+        voiceKey: outgoing.voiceKey,
+        voicePeaks: outgoing.voice?.peaks,
         replyToId: outgoing.replyTo?.id,
       });
       replaceInThread(queryClient, conversation.id, temp.id, message);
       upsertConversation(queryClient, message, { countUnread: false });
       // The bubble shows the server's copy now. A failed one keeps the preview for "Retry".
       if (outgoing.previewUrl) URL.revokeObjectURL(outgoing.previewUrl);
+      if (outgoing.voice) URL.revokeObjectURL(outgoing.voice.url);
     } catch (error) {
       markFailedInThread(queryClient, conversation.id, temp.id);
       toast.error(isApiClientError(error) ? error.message : 'Could not send the message');
@@ -417,6 +426,8 @@ export function Thread({ conversation, embedded = false, className }: ThreadProp
                           imageKey: message.imageKey,
                           previewUrl: message.image?.url,
                           previewSize: message.image ?? undefined,
+                          voiceKey: message.voiceKey,
+                          voice: message.voice ?? undefined,
                           replyTo:
                             message.replyTo && 'id' in message.replyTo
                               ? message.replyTo
@@ -629,13 +640,17 @@ function MessageList({ messages, meId, conversation, onRetry, onReply }: Message
                 },
               ]
             : []),
-          ...(canManage
+          ...(canManage && !message.voice
             ? [
                 {
                   label: 'Edit message',
                   icon: <PencilIcon />,
                   onSelect: () => setEditing(message.id),
                 },
+              ]
+            : []),
+          ...(canManage
+            ? [
                 {
                   label: 'Delete message',
                   icon: <Trash2Icon />,
@@ -678,7 +693,11 @@ function MessageList({ messages, meId, conversation, onRetry, onReply }: Message
                     ? cn('px-0.5', emoji === 1 ? 'text-5xl/tight' : 'text-4xl/tight')
                     : cn(
                         'text-[15px]/5',
-                        message.image || message.sharedPost ? 'p-1' : 'px-3.5 py-2',
+                        message.image || message.sharedPost
+                          ? 'p-1'
+                          : message.voice
+                            ? 'px-2 py-1.5'
+                            : 'px-3.5 py-2',
                         deleted
                           ? 'text-muted-foreground border border-dashed bg-transparent italic'
                           : mine
@@ -725,6 +744,14 @@ function MessageList({ messages, meId, conversation, onRetry, onReply }: Message
                   </button>
                 ) : null}
                 {message.sharedPost ? <SharedPostCard post={message.sharedPost} /> : null}
+                {message.voice && !deleted ? (
+                  <VoiceNote
+                    id={message.id}
+                    conversationId={conversation.id}
+                    voice={message.voice}
+                    disabled={message.status === 'sending'}
+                  />
+                ) : null}
                 {isEditing ? (
                   <div className={cn('text-foreground', captioned && 'px-2.5 pt-1.5 pb-1')}>
                     <InlineEditor
@@ -793,9 +820,11 @@ function MessageList({ messages, meId, conversation, onRetry, onReply }: Message
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align={mine ? 'end' : 'start'}>
-                        <DropdownMenuItem onSelect={() => setEditing(message.id)}>
-                          <PencilIcon /> Edit message
-                        </DropdownMenuItem>
+                        {message.voice ? null : (
+                          <DropdownMenuItem onSelect={() => setEditing(message.id)}>
+                            <PencilIcon /> Edit message
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuItem
                           variant="destructive"
                           onSelect={() => setDeleting(message.id)}

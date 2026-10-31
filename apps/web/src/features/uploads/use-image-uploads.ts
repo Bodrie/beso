@@ -1,4 +1,4 @@
-import type { UploadKind } from '@beso/shared';
+import type { ImageUploadKind } from '@beso/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { isApiClientError } from '@/lib/api/client';
 import { uploadImage } from '@/lib/api/uploads';
@@ -13,7 +13,7 @@ let nextId = 0;
  * soon as it is chosen, with its own preview, progress and retry, up to `max`. The caller
  * submits the keys once every item is `ready`.
  */
-export function useImageUploads(kind: UploadKind, max: number) {
+export function useImageUploads(kind: ImageUploadKind, max: number) {
   const [items, setItems] = useState<ImageUploadItem[]>([]);
   const controllers = useRef(new Map<string, AbortController>());
   const previews = useRef(new Map<string, string>());

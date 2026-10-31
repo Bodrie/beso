@@ -116,3 +116,24 @@ describe('setGroupPictureSchema', () => {
     expect(setGroupPictureSchema.safeParse({}).success).toBe(false);
   });
 });
+
+describe('voice messages', () => {
+  it('go alone: a voice key with text, a picture or a post is refused, a reply is fine', () => {
+    const voiceKey = `voice/${ID}.ogg`;
+    expect(sendMessageSchema.parse({ voiceKey, voicePeaks: [0, 0.5, 1] })).toEqual({
+      content: '',
+      voiceKey,
+      voicePeaks: [0, 0.5, 1],
+    });
+    expect(sendMessageSchema.safeParse({ voiceKey, replyToId: ID }).success).toBe(true);
+    expect(sendMessageSchema.safeParse({ voiceKey, content: 'hi' }).success).toBe(false);
+    expect(sendMessageSchema.safeParse({ voiceKey, imageKey: `message/${ID}.webp` }).success).toBe(
+      false,
+    );
+    expect(sendMessageSchema.safeParse({ voiceKey, postId: ID }).success).toBe(false);
+    expect(sendMessageSchema.safeParse({ voiceKey: `message/${ID}.webp` }).success).toBe(false);
+    expect(sendMessageSchema.safeParse({ voiceKey: `voice/${ID}.webp` }).success).toBe(false);
+    expect(sendMessageSchema.safeParse({ content: 'hi', voicePeaks: [0.2] }).success).toBe(false);
+    expect(sendMessageSchema.safeParse({ voiceKey, voicePeaks: [1.5] }).success).toBe(false);
+  });
+});

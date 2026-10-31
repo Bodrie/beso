@@ -136,6 +136,7 @@ export function messagePreview(message: Message, conversation: Conversation, meI
 /** The thing a message without text carries, for list rows, alerts and announcements. */
 export function attachmentWord(message: Message): string {
   if (message.image) return 'Picture';
+  if (message.voice) return 'Voice message';
   return message.sharedPost ? 'Post' : 'Message';
 }
 
@@ -166,11 +167,16 @@ export function replyQuoteText(reply: QuotedMessage, loaded: Message | undefined
   }
   if (reply.deleted) return 'Message deleted';
   if (reply.excerpt) return reply.excerpt;
-  return reply.attachment === 'picture'
-    ? 'Picture'
-    : reply.attachment === 'post'
-      ? 'Post'
-      : 'Message';
+  switch (reply.attachment) {
+    case 'picture':
+      return 'Picture';
+    case 'voice':
+      return 'Voice message';
+    case 'post':
+      return 'Post';
+    default:
+      return 'Message';
+  }
 }
 
 /** The quote an optimistic reply carries until the server's copy takes its place. */
@@ -181,7 +187,13 @@ export function quoteOf(message: Message): QuotedMessage {
     senderId: message.senderId,
     excerpt:
       flat.length > REPLY_EXCERPT_LENGTH ? `${flat.slice(0, REPLY_EXCERPT_LENGTH - 1)}…` : flat,
-    attachment: message.image ? 'picture' : message.sharedPost ? 'post' : null,
+    attachment: message.image
+      ? 'picture'
+      : message.voice
+        ? 'voice'
+        : message.sharedPost
+          ? 'post'
+          : null,
     deleted: message.deletedAt !== null,
   };
 }

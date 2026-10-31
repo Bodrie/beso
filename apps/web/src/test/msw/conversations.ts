@@ -85,6 +85,9 @@ const memberRow = (viewerId: string, conversationId: string): MockConversation |
     (row) => row.id === conversationId && row.members.some((m) => m.userId === viewerId),
   );
 
+/** A voice message as the fake API stores it: the upload's key and the recorder's waveform. */
+export type StoredVoice = { key: string; peaks: number[] };
+
 /** Persists a message the way the API does: it also moves the sender's read mark. */
 export function storeMessage(
   conversationId: string,
@@ -93,11 +96,19 @@ export function storeMessage(
   imageKey?: string,
   postId?: string,
   replyToId?: string,
+  voice?: StoredVoice,
 ): Message {
   const url = imageKey ? `http://localhost/api/v1/uploads/${imageKey}` : null;
   const original = replyToId ? mockDb.messages.find((m) => m.id === replyToId) : undefined;
   const message = makeMessage(conversationId, senderId, content, {
     image: url ? { url, width: 64, height: 64 } : null,
+    voice: voice
+      ? {
+          url: `http://localhost/api/v1/uploads/${voice.key}`,
+          durationMs: mockDb.voiceDurations.get(voice.key) ?? 3000,
+          peaks: voice.peaks,
+        }
+      : null,
     imageUrl: url,
     sharedPost: postId ? { id: postId } : null,
     replyTo: original
@@ -105,7 +116,13 @@ export function storeMessage(
           id: original.id,
           senderId: original.senderId,
           excerpt: original.content,
-          attachment: original.image ? 'picture' : original.sharedPost ? 'post' : null,
+          attachment: original.image
+            ? 'picture'
+            : original.voice
+              ? 'voice'
+              : original.sharedPost
+                ? 'post'
+                : null,
           deleted: original.deletedAt !== null,
         }
       : null,
@@ -286,6 +303,7 @@ export const conversationHandlers = [
       message.deletedAt = new Date().toISOString();
       message.content = '';
       message.image = null;
+      message.voice = null;
       message.imageUrl = null;
       message.sharedPost = null;
       message.replyTo = null;
@@ -312,6 +330,7 @@ export const conversationHandlers = [
       body.imageKey,
       body.postId,
       body.replyToId,
+      body.voiceKey ? { key: body.voiceKey, peaks: body.voicePeaks ?? [] } : undefined,
     );
     return HttpResponse.json(message, { status: 201 });
   }),

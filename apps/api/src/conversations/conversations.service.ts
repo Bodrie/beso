@@ -226,6 +226,13 @@ export class ConversationsService {
         field: 'imageKey',
       });
     }
+    if (input.voiceKey !== undefined) {
+      await this.uploads.assertOwned(input.voiceKey, {
+        ownerId: meId,
+        kind: 'voice',
+        field: 'voiceKey',
+      });
+    }
     if (input.postId !== undefined) await this.assertShareable(meId, input.postId);
     if (input.replyToId !== undefined) await this.assertAnswerable(id, input.replyToId);
     const created = await this.prisma.$transaction(async (tx) => {
@@ -235,6 +242,8 @@ export class ConversationsService {
           senderId: meId,
           content: input.content,
           imageKey: input.imageKey ?? null,
+          voiceKey: input.voiceKey ?? null,
+          voicePeaks: input.voiceKey === undefined ? [] : (input.voicePeaks ?? []),
           sharedPostId: input.postId ?? null,
           sharesPost: input.postId !== undefined,
           replyToId: input.replyToId ?? null,
@@ -289,7 +298,7 @@ export class ConversationsService {
 
   /**
    * The sender takes a message back, however old: the row stays (ordering, read marks), its
-   * text, picture and post go, and everyone sees "Message deleted". Idempotent.
+   * text, picture, voice and post go, and everyone sees "Message deleted". Idempotent.
    */
   async deleteMessage(meId: string, id: string, messageId: string): Promise<Message> {
     const row = await this.rowForMember(meId, id);
@@ -307,6 +316,8 @@ export class ConversationsService {
         deletedAt: new Date(),
         content: '',
         imageKey: null,
+        voiceKey: null,
+        voicePeaks: [],
         sharedPostId: null,
         sharesPost: false,
         replyToId: null,
@@ -315,6 +326,7 @@ export class ConversationsService {
       select: messageSelect,
     });
     await this.uploads.discard(existing.imageKey);
+    await this.uploads.discard(existing.voiceKey);
     const message = this.toMessage(updated);
     await this.events.emitAsync(
       MessageDeletedEvent.EVENT,
@@ -337,6 +349,7 @@ export class ConversationsService {
     const row = await this.rowForMember(meId, id);
     const existing = await this.userMessage(id, messageId);
     if (existing.senderId !== meId) throw forbidden('Only the sender can edit a message');
+    if (existing.voiceKey !== null) throw badRequest('A voice message has no text to edit');
     if (existing.content === input.content) return this.toMessage(existing);
     const [, updated] = await this.prisma.$transaction([
       this.prisma.messageRevision.create({ data: { messageId, content: existing.content } }),

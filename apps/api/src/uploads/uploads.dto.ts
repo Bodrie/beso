@@ -4,12 +4,13 @@ import { z } from 'zod';
 
 export class UploadQueryDto extends createZodDto(uploadQuerySchema) {}
 
+/** The kind and the file name; whether they go together is `UPLOAD_KEY_PATTERN`'s call in the controller. */
 const uploadPathSchema = z.object({
   kind: uploadKindSchema,
   file: z
     .string()
     .regex(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.webp$/,
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(webp|ogg)$/,
       'Invalid file name',
     ),
 });

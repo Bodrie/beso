@@ -5,7 +5,13 @@ import { uuidSchema } from './common.js';
 import type { Activity } from './activities.js';
 import type { Notification } from './notifications.js';
 import { cursorQuerySchema, paginatedSchema } from './pagination.js';
-import { groupPictureKeySchema, messageImageKeySchema, storedImageSchema } from './uploads.js';
+import {
+  groupPictureKeySchema,
+  messageImageKeySchema,
+  storedImageSchema,
+  voiceKeySchema,
+  voicePeaksSchema,
+} from './uploads.js';
 import { userSummarySchema } from './users.js';
 
 export const MESSAGE_MAX_LENGTH = 2000;
@@ -87,11 +93,22 @@ export const replyRefSchema = z.union([
     senderId: z.uuid(),
     excerpt: z.string(),
     /** What it carried besides its text. */
-    attachment: z.enum(['picture', 'post']).nullable(),
+    attachment: z.enum(['picture', 'post', 'voice']).nullable(),
     deleted: z.boolean(),
   }),
 ]);
 export type ReplyRef = z.infer<typeof replyRefSchema>;
+
+/**
+ * A voice message as the bubble plays it (ADR 0009 amendment "voice messages"): the file, how
+ * long it is (read from the file by the API) and the waveform the recorder measured.
+ */
+export const voiceNoteSchema = z.object({
+  url: z.string(),
+  durationMs: z.int().positive(),
+  peaks: voicePeaksSchema,
+});
+export type VoiceNote = z.infer<typeof voiceNoteSchema>;
 
 export const messageSchema = z.object({
   id: z.uuid(),
@@ -99,9 +116,11 @@ export const messageSchema = z.object({
   senderId: z.uuid(),
   /** `system` lines are written by the server about membership changes and renames. */
   kind: messageKindSchema,
-  /** Empty when the message is a picture or a post only, a system line or deleted. */
+  /** Empty when the message is a picture, a post or a voice message only, a system line or deleted. */
   content: z.string(),
   image: storedImageSchema.nullable(),
+  /** A voice message; it carries no text, picture or post, and is null once deleted. */
+  voice: voiceNoteSchema.nullable(),
   /** A post sent along; null on most messages, and once the message is deleted. */
   sharedPost: sharedPostRefSchema.nullable(),
   /** The message this one answers; null when it answers none, and once it is deleted. */
@@ -123,7 +142,10 @@ export type Message = z.infer<typeof messageSchema>;
 export const messageListSchema = paginatedSchema(messageSchema);
 export type MessageList = z.infer<typeof messageListSchema>;
 
-/** Text, a picture, a post or any of them together; never none. */
+/**
+ * Text, a picture, a post or any of them together; or a voice message on its own (it may still
+ * answer another message); never none.
+ */
 export const sendMessageSchema = z
   .object({
     content: z
@@ -136,12 +158,29 @@ export const sendMessageSchema = z
     postId: uuidSchema.optional(),
     /** The message this one answers, in the same conversation, not deleted, not a system line. */
     replyToId: uuidSchema.optional(),
+    /** A voice message: an upload made with `POST /uploads/voice`, alone. */
+    voiceKey: voiceKeySchema.optional(),
+    /** The waveform the recorder measured; only with `voiceKey`. */
+    voicePeaks: voicePeaksSchema.optional(),
   })
   .refine(
     (value) =>
-      value.content.length > 0 || value.imageKey !== undefined || value.postId !== undefined,
+      value.content.length > 0 ||
+      value.imageKey !== undefined ||
+      value.postId !== undefined ||
+      value.voiceKey !== undefined,
     { message: 'Write something or attach a picture', path: ['content'] },
-  );
+  )
+  .refine(
+    (value) =>
+      value.voiceKey === undefined ||
+      (value.content.length === 0 && value.imageKey === undefined && value.postId === undefined),
+    { message: 'A voice message carries nothing else', path: ['voiceKey'] },
+  )
+  .refine((value) => value.voicePeaks === undefined || value.voiceKey !== undefined, {
+    message: 'Only a voice message has a waveform',
+    path: ['voicePeaks'],
+  });
 export type SendMessageInput = z.input<typeof sendMessageSchema>;
 export type SendMessageData = z.output<typeof sendMessageSchema>;
 

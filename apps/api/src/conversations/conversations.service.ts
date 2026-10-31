@@ -15,6 +15,7 @@ import {
   type RenameGroupInput,
   type Revision,
   type SendMessageData,
+  type SetGroupPictureInput,
   type SystemLine,
 } from '@beso/shared';
 import { AssetsService } from '../assets/assets.service.js';
@@ -64,8 +65,9 @@ type Tx = Prisma.TransactionClient;
  * Direct conversations exist once per pair and appear in the list only once something was
  * said; groups are created on purpose and show up right away. Every read goes through a
  * membership check, and non-members get a 404 so the existence of a group never leaks.
- * Group admins (the creator at first) rename, remove people and hand the role on; the
- * server writes a system line into the thread for every membership change and rename.
+ * Group admins (the creator at first) rename, set the picture, remove people and hand the
+ * role on; the server writes a system line into the thread for every membership change,
+ * rename and picture change.
  */
 @Injectable()
 export class ConversationsService {
@@ -224,6 +226,13 @@ export class ConversationsService {
         field: 'imageKey',
       });
     }
+    if (input.voiceKey !== undefined) {
+      await this.uploads.assertOwned(input.voiceKey, {
+        ownerId: meId,
+        kind: 'voice',
+        field: 'voiceKey',
+      });
+    }
     if (input.postId !== undefined) await this.assertShareable(meId, input.postId);
     if (input.replyToId !== undefined) await this.assertAnswerable(id, input.replyToId);
     const created = await this.prisma.$transaction(async (tx) => {
@@ -233,6 +242,8 @@ export class ConversationsService {
           senderId: meId,
           content: input.content,
           imageKey: input.imageKey ?? null,
+          voiceKey: input.voiceKey ?? null,
+          voicePeaks: input.voiceKey === undefined ? [] : (input.voicePeaks ?? []),
           sharedPostId: input.postId ?? null,
           sharesPost: input.postId !== undefined,
           replyToId: input.replyToId ?? null,
@@ -287,7 +298,7 @@ export class ConversationsService {
 
   /**
    * The sender takes a message back, however old: the row stays (ordering, read marks), its
-   * text, picture and post go, and everyone sees "Message deleted". Idempotent.
+   * text, picture, voice and post go, and everyone sees "Message deleted". Idempotent.
    */
   async deleteMessage(meId: string, id: string, messageId: string): Promise<Message> {
     const row = await this.rowForMember(meId, id);
@@ -305,6 +316,8 @@ export class ConversationsService {
         deletedAt: new Date(),
         content: '',
         imageKey: null,
+        voiceKey: null,
+        voicePeaks: [],
         sharedPostId: null,
         sharesPost: false,
         replyToId: null,
@@ -313,6 +326,7 @@ export class ConversationsService {
       select: messageSelect,
     });
     await this.uploads.discard(existing.imageKey);
+    await this.uploads.discard(existing.voiceKey);
     const message = this.toMessage(updated);
     await this.events.emitAsync(
       MessageDeletedEvent.EVENT,
@@ -335,6 +349,7 @@ export class ConversationsService {
     const row = await this.rowForMember(meId, id);
     const existing = await this.userMessage(id, messageId);
     if (existing.senderId !== meId) throw forbidden('Only the sender can edit a message');
+    if (existing.voiceKey !== null) throw badRequest('A voice message has no text to edit');
     if (existing.content === input.content) return this.toMessage(existing);
     const [, updated] = await this.prisma.$transaction([
       this.prisma.messageRevision.create({ data: { messageId, content: existing.content } }),
@@ -461,6 +476,7 @@ export class ConversationsService {
     const remaining = memberIdsOf(row).filter((userId) => userId !== meId);
     if (remaining.length === 0) {
       await this.prisma.conversation.delete({ where: { id } });
+      await this.uploads.discard(row.pictureKey);
       await this.events.emitAsync(
         ConversationLeftEvent.EVENT,
         new ConversationLeftEvent(id, meId, remaining),
@@ -525,14 +541,49 @@ export class ConversationsService {
         title: input.title,
       });
     });
-    const updated = await this.rowForMember(meId, id);
-    const memberIds = memberIdsOf(updated);
-    await this.events.emitAsync(
-      ConversationUpdatedEvent.EVENT,
-      new ConversationUpdatedEvent(id, memberIds),
-    );
-    await this.events.emitAsync(MessageSentEvent.EVENT, new MessageSentEvent(line, memberIds));
-    return this.withUnreadOne(updated, meId);
+    return this.announceChange(meId, id, line);
+  }
+
+  /**
+   * Admins only: the group's picture, an upload of kind `group` made by the caller. The
+   * previous file is discarded; the same key again is a no-op.
+   */
+  async setPicture(meId: string, id: string, input: SetGroupPictureInput): Promise<Conversation> {
+    const row = await this.groupForAdmin(meId, id);
+    await this.uploads.assertOwned(input.pictureKey, {
+      ownerId: meId,
+      kind: 'group',
+      field: 'pictureKey',
+    });
+    if (row.pictureKey === input.pictureKey) return this.withUnreadOne(row, meId);
+    const line = await this.prisma.$transaction(async (tx) => {
+      await tx.conversation.update({ where: { id }, data: { pictureKey: input.pictureKey } });
+      return this.writeSystemLine(tx, id, meId, {
+        type: 'picture_changed',
+        actor: this.personOf(row, meId),
+        users: [],
+        title: null,
+      });
+    });
+    await this.uploads.discard(row.pictureKey);
+    return this.announceChange(meId, id, line);
+  }
+
+  /** Admins only; a group without a picture is a no-op. */
+  async removePicture(meId: string, id: string): Promise<Conversation> {
+    const row = await this.groupForAdmin(meId, id);
+    if (row.pictureKey === null) return this.withUnreadOne(row, meId);
+    const line = await this.prisma.$transaction(async (tx) => {
+      await tx.conversation.update({ where: { id }, data: { pictureKey: null } });
+      return this.writeSystemLine(tx, id, meId, {
+        type: 'picture_removed',
+        actor: this.personOf(row, meId),
+        users: [],
+        title: null,
+      });
+    });
+    await this.uploads.discard(row.pictureKey);
+    return this.announceChange(meId, id, line);
   }
 
   /** Admins only. Demoting the last admin is refused so a group never ends up without one. */
@@ -564,6 +615,14 @@ export class ConversationsService {
         title: null,
       });
     });
+    return this.announceChange(meId, id, line);
+  }
+
+  /**
+   * After a change to the group itself (its title, picture or roles): every member refetches
+   * the conversation and gets the system line; the caller gets the fresh row.
+   */
+  private async announceChange(meId: string, id: string, line: Message): Promise<Conversation> {
     const updated = await this.rowForMember(meId, id);
     const memberIds = memberIdsOf(updated);
     await this.events.emitAsync(

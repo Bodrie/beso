@@ -8,6 +8,7 @@ import { LocalStorageService } from './local-storage.service.js';
 import { STORAGE } from './storage.js';
 import { UploadsController } from './uploads.controller.js';
 import { UploadsService } from './uploads.service.js';
+import { VoiceProcessor } from './voice-processor.js';
 
 @Module({
   imports: [
@@ -29,7 +30,12 @@ import { UploadsService } from './uploads.service.js';
     }),
   ],
   controllers: [UploadsController],
-  providers: [{ provide: STORAGE, useClass: LocalStorageService }, ImageProcessor, UploadsService],
+  providers: [
+    { provide: STORAGE, useClass: LocalStorageService },
+    ImageProcessor,
+    VoiceProcessor,
+    UploadsService,
+  ],
   exports: [UploadsService],
 })
 export class UploadsModule {}

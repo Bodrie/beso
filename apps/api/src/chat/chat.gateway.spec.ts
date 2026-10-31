@@ -134,6 +134,7 @@ describe('ChatGateway', () => {
       kind: 'user' as const,
       content: 'fixed',
       image: null,
+      voice: null,
       imageUrl: null,
       sharedPost: null,
       replyTo: null,

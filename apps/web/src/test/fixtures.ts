@@ -263,6 +263,7 @@ export function makeMessage(
     kind: 'user',
     content,
     image: null,
+    voice: null,
     imageUrl: null,
     sharedPost: null,
     replyTo: null,

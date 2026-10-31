@@ -24,6 +24,7 @@ export type MockConversation = {
   id: string;
   kind: ConversationKind;
   title: string | null;
+  pictureUrl: string | null;
   createdById: string | null;
   createdAt: string;
   members: {
@@ -64,6 +65,8 @@ export const mockDb = {
   lastUpload: null as { name: string; type: string; size: number } | null,
   /** Which file became which key (uploads run in parallel, so their order is not the keys'). */
   uploadedNames: new Map<string, string>(),
+  /** The length the fake API "read" from each voice upload, by key. */
+  voiceDurations: new Map<string, number>(),
   /** Links the fake API "mailed"; tests read the token here instead of an inbox. */
   emailTokens: [] as { token: string; kind: 'verify' | 'reset' | 'change'; email: string }[],
   /** The signed-in user's devices, as GET /auth/sessions lists them. */
@@ -124,6 +127,7 @@ export function resetMockDb(): void {
   mockDb.uploads = 0;
   mockDb.lastUpload = null;
   mockDb.uploadedNames = new Map();
+  mockDb.voiceDurations = new Map();
   mockDb.emailTokens = [];
   mockDb.sessions = [];
   mockDb.lastRegistration = null;
@@ -171,7 +175,12 @@ export function seedFollow(followerId: string, followingId: string): void {
 export function seedConversation(
   kind: ConversationKind,
   memberIds: string[],
-  options: { title?: string; createdById?: string; createdAt?: string } = {},
+  options: {
+    title?: string;
+    pictureUrl?: string | null;
+    createdById?: string;
+    createdAt?: string;
+  } = {},
 ): MockConversation {
   conversationSequence += 1;
   const createdAt = options.createdAt ?? '2026-10-15T08:00:00.000Z';
@@ -180,6 +189,7 @@ export function seedConversation(
     id: testId('conversation', conversationSequence),
     kind,
     title: options.title ?? null,
+    pictureUrl: options.pictureUrl ?? null,
     createdById,
     createdAt,
     // Like the API: the creator of a group is its admin.

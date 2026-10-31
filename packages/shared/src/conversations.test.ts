@@ -6,6 +6,7 @@ import {
   replyRefSchema,
   sendMessagePayloadSchema,
   sendMessageSchema,
+  setGroupPictureSchema,
 } from './conversations.js';
 
 const ID = '01a13ed6-d3ec-71cb-b39f-fbc256a293b9';
@@ -101,5 +102,38 @@ describe('replies', () => {
     const quote = { id: ID, senderId: ID, excerpt: 'Lunch?', attachment: null, deleted: false };
     expect(replyRefSchema.parse(quote)).toEqual(quote);
     expect(replyRefSchema.parse({ unavailable: true })).toEqual({ unavailable: true });
+  });
+});
+
+describe('setGroupPictureSchema', () => {
+  it('takes an upload of kind "group" and nothing else', () => {
+    expect(setGroupPictureSchema.parse({ pictureKey: `group/${ID}.webp` })).toEqual({
+      pictureKey: `group/${ID}.webp`,
+    });
+    expect(setGroupPictureSchema.safeParse({ pictureKey: `avatar/${ID}.webp` }).success).toBe(
+      false,
+    );
+    expect(setGroupPictureSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+describe('voice messages', () => {
+  it('go alone: a voice key with text, a picture or a post is refused, a reply is fine', () => {
+    const voiceKey = `voice/${ID}.ogg`;
+    expect(sendMessageSchema.parse({ voiceKey, voicePeaks: [0, 0.5, 1] })).toEqual({
+      content: '',
+      voiceKey,
+      voicePeaks: [0, 0.5, 1],
+    });
+    expect(sendMessageSchema.safeParse({ voiceKey, replyToId: ID }).success).toBe(true);
+    expect(sendMessageSchema.safeParse({ voiceKey, content: 'hi' }).success).toBe(false);
+    expect(sendMessageSchema.safeParse({ voiceKey, imageKey: `message/${ID}.webp` }).success).toBe(
+      false,
+    );
+    expect(sendMessageSchema.safeParse({ voiceKey, postId: ID }).success).toBe(false);
+    expect(sendMessageSchema.safeParse({ voiceKey: `message/${ID}.webp` }).success).toBe(false);
+    expect(sendMessageSchema.safeParse({ voiceKey: `voice/${ID}.webp` }).success).toBe(false);
+    expect(sendMessageSchema.safeParse({ content: 'hi', voicePeaks: [0.2] }).success).toBe(false);
+    expect(sendMessageSchema.safeParse({ voiceKey, voicePeaks: [1.5] }).success).toBe(false);
   });
 });

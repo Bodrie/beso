@@ -2,12 +2,19 @@ import { randomUUID } from 'node:crypto';
 import type { Readable } from 'node:stream';
 import { buffer } from 'node:stream/consumers';
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { UploadKind, UploadResponse } from '@beso/shared';
+import {
+  IMAGE_UPLOAD_KINDS,
+  type ImageUploadKind,
+  type UploadKind,
+  type UploadResponse,
+  type VoiceUploadResponse,
+} from '@beso/shared';
 import { AssetsService } from '../assets/assets.service.js';
 import { badRequest } from '../common/errors.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { ImageProcessor } from './image-processor.js';
 import { STORAGE, type StorageService } from './storage.js';
+import { VoiceProcessor } from './voice-processor.js';
 
 export type OwnershipCheck = { ownerId: string; kind: UploadKind; field: string };
 
@@ -21,11 +28,12 @@ export class UploadsService {
   constructor(
     @Inject(STORAGE) private readonly storage: StorageService,
     private readonly images: ImageProcessor,
+    private readonly voices: VoiceProcessor,
     private readonly prisma: PrismaService,
     private readonly assets: AssetsService,
   ) {}
 
-  async upload(kind: UploadKind, input: Buffer, ownerId: string): Promise<UploadResponse> {
+  async upload(kind: ImageUploadKind, input: Buffer, ownerId: string): Promise<UploadResponse> {
     const image = await this.images.process(input, kind);
     const key = `${kind}/${randomUUID()}.webp`;
     await this.storage.put(key, image.data, image.contentType);
@@ -51,6 +59,36 @@ export class UploadsService {
       width: image.width,
       height: image.height,
       bytes: image.data.length,
+    };
+  }
+
+  /**
+   * A voice message the browser encoded (ADR 0009 amendment "voice messages"): checked, never
+   * re-encoded, stored under `voice/<uuid>.ogg` with its length on the row.
+   */
+  async uploadVoice(input: Buffer, ownerId: string): Promise<VoiceUploadResponse> {
+    const voice = this.voices.process(input);
+    const key = `voice/${randomUUID()}.ogg`;
+    await this.storage.put(key, voice.data, voice.contentType);
+    try {
+      await this.prisma.upload.create({
+        data: {
+          key,
+          ownerId,
+          kind: 'voice',
+          bytes: voice.data.length,
+          durationMs: voice.durationMs,
+        },
+      });
+    } catch (error) {
+      await this.deleteFiles([key]);
+      throw error;
+    }
+    return {
+      key,
+      url: this.assets.url(key),
+      bytes: voice.data.length,
+      durationMs: voice.durationMs,
     };
   }
 
@@ -102,10 +140,10 @@ export class UploadsService {
   }
 
   /**
-   * Housekeeping (JobsService): uploads older than `before` that no profile, post or message
-   * ever attached. The rows go first, re-checking the references in the same statement so an
-   * attach racing the job is refused ("Unknown upload") rather than left pointing at nothing;
-   * the files follow, best effort. Returns the count.
+   * Housekeeping (JobsService): uploads older than `before` that no profile, post, message or
+   * group ever attached. The rows go first, re-checking the references in the same statement
+   * so an attach racing the job is refused ("Unknown upload") rather than left pointing at
+   * nothing; the files follow, best effort. Returns the count.
    */
   async deleteOrphans(before: Date): Promise<number> {
     const rows = await this.prisma.$queryRaw<{ key: string }[]>`
@@ -113,7 +151,8 @@ export class UploadsService {
       WHERE u.created_at < ${before}
         AND NOT EXISTS (SELECT 1 FROM users x WHERE x.avatar_key = u.key OR x.cover_key = u.key)
         AND NOT EXISTS (SELECT 1 FROM post_images p WHERE p.key = u.key)
-        AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.image_key = u.key)
+        AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.image_key = u.key OR m.voice_key = u.key)
+        AND NOT EXISTS (SELECT 1 FROM conversations c WHERE c.picture_key = u.key)
       RETURNING u.key`;
     await this.deleteFiles(rows.map((row) => row.key));
     return rows.length;
@@ -126,7 +165,8 @@ export class UploadsService {
    */
   async fillSizes(): Promise<number> {
     const rows = await this.prisma.upload.findMany({
-      where: { width: null },
+      // Pictures only: a voice message has no size to fill in.
+      where: { width: null, kind: { in: [...IMAGE_UPLOAD_KINDS] } },
       select: { key: true },
       orderBy: { createdAt: 'asc' },
       take: SIZE_BATCH,
@@ -163,12 +203,13 @@ export class UploadsService {
   async discard(key: string | null): Promise<void> {
     if (key === null) return;
     try {
-      const [profiles, posts, messages] = await Promise.all([
+      const [profiles, posts, messages, groups] = await Promise.all([
         this.prisma.user.count({ where: { OR: [{ avatarKey: key }, { coverKey: key }] } }),
         this.prisma.postImage.count({ where: { key } }),
-        this.prisma.message.count({ where: { imageKey: key } }),
+        this.prisma.message.count({ where: { OR: [{ imageKey: key }, { voiceKey: key }] } }),
+        this.prisma.conversation.count({ where: { pictureKey: key } }),
       ]);
-      if (profiles + posts + messages > 0) return;
+      if (profiles + posts + messages + groups > 0) return;
       await this.storage.delete(key);
       await this.prisma.upload.deleteMany({ where: { key } });
     } catch (error) {

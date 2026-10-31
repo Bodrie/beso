@@ -41,6 +41,14 @@ export function formatTime(iso: string): string {
   return dayjs(iso).format('HH:mm');
 }
 
+/** "0:07", "1:30": the length or position of a clip, whole seconds. */
+export function formatDuration(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1000));
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;

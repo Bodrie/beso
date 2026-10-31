@@ -36,6 +36,7 @@ import {
   MessagesQueryDto,
   RenameGroupDto,
   SendMessageDto,
+  SetGroupPictureDto,
   SetMemberRoleDto,
 } from './conversations.dto.js';
 import { ConversationsService } from './conversations.service.js';
@@ -86,6 +87,24 @@ export class ConversationsController {
     @Body() body: RenameGroupDto,
   ): Promise<Conversation> {
     return this.conversations.rename(user.id, params.id, body);
+  }
+
+  /** Admins give a group a picture (an upload of kind `group`); a system line tells the members. */
+  @Put(':id/picture')
+  @ZodResponse({ status: 200, type: ConversationDto })
+  setPicture(
+    @CurrentUser() user: AuthUser,
+    @Param() params: IdParamDto,
+    @Body() body: SetGroupPictureDto,
+  ): Promise<Conversation> {
+    return this.conversations.setPicture(user.id, params.id, body);
+  }
+
+  /** Admins take the picture away again; a group without one is a no-op. */
+  @Delete(':id/picture')
+  @ZodResponse({ status: 200, type: ConversationDto })
+  removePicture(@CurrentUser() user: AuthUser, @Param() params: IdParamDto): Promise<Conversation> {
+    return this.conversations.removePicture(user.id, params.id);
   }
 
   @Get(':id/messages')

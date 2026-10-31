@@ -1,4 +1,4 @@
-import { UPLOAD_LIMITS, type UploadKind, type UploadResponse } from '@beso/shared';
+import { type ImageUploadKind, UPLOAD_LIMITS, type UploadResponse } from '@beso/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { isApiClientError } from '@/lib/api/client';
 import { uploadImage } from '@/lib/api/uploads';
@@ -25,7 +25,7 @@ export function describeImageProblem(file: File): string | null {
  * Uploads an image as soon as it is selected, keeping a local preview meanwhile.
  * The caller submits `state.upload.key` once the status is `ready`.
  */
-export function useImageUpload(kind: UploadKind) {
+export function useImageUpload(kind: ImageUploadKind) {
   const [state, setState] = useState<ImageUploadState>({ status: 'idle' });
   const controller = useRef<AbortController | null>(null);
   const previewUrl = useRef<string | null>(null);

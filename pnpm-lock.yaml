@@ -183,6 +183,9 @@ catalogs:
     nodemailer:
       specifier: 10.1.2
       version: 10.1.2
+    opus-recorder:
+      specifier: 8.0.5
+      version: 8.0.5
     oxlint:
       specifier: 1.88.0
       version: 1.88.0
@@ -512,6 +515,9 @@ importers:
       next-themes:
         specifier: 'catalog:'
         version: 0.4.6(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      opus-recorder:
+        specifier: 'catalog:'
+        version: 8.0.5
       radix-ui:
         specifier: 'catalog:'
         version: 1.8.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -4989,6 +4995,9 @@ packages:
   onetime@7.0.0:
     resolution: {integrity: sha512-VXJjc87FScF88uafS3JllDgvAm+c/Slfz06lorj2uAY34rlUu0Nt+v8wreiImcrgAjjIHp1rXpTDlLOGw29WwQ==}
     engines: {node: '>=18'}
+
+  opus-recorder@8.0.5:
+    resolution: {integrity: sha512-tBRXc9Btds7i3bVfA7d5rekAlyOcfsivt5vSIXHxRV1Oa+s6iXFW8omZ0Lm3ABWotVcEyKt96iIIUcgbV07YOw==}
 
   ora@9.4.1:
     resolution: {integrity: sha512-6VlU9MLXbjVQD04AZCMX28hVtA5bUoadvUqO76MUCVA0ilwJbMiHsITRPfyVm6p/BC0Av/BXMujx39WCe1LEqw==}
@@ -10042,6 +10051,8 @@ snapshots:
   onetime@7.0.0:
     dependencies:
       mimic-function: 5.0.1
+
+  opus-recorder@8.0.5: {}
 
   ora@9.4.1:
     dependencies:

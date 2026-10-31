@@ -7,6 +7,7 @@ import {
   messagesQuerySchema,
   renameGroupSchema,
   sendMessageSchema,
+  setGroupPictureSchema,
   setMemberRoleSchema,
   uuidSchema,
 } from '@beso/shared';
@@ -22,6 +23,7 @@ export class CreateGroupDto extends createZodDto(createGroupSchema) {}
 export class AddMembersDto extends createZodDto(addMembersSchema) {}
 export class RenameGroupDto extends createZodDto(renameGroupSchema) {}
 export class SetMemberRoleDto extends createZodDto(setMemberRoleSchema) {}
+export class SetGroupPictureDto extends createZodDto(setGroupPictureSchema) {}
 export class MessageParamsDto extends createZodDto(
   z.object({ id: uuidSchema, messageId: uuidSchema }),
 ) {}

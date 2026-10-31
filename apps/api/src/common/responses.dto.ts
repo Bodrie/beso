@@ -26,6 +26,7 @@ import {
   trendingTagListSchema,
   unreadCountSchema,
   uploadResponseSchema,
+  voiceUploadResponseSchema,
   userListSchema,
   userPublicSchema,
   verifyEmailResponseSchema,
@@ -71,6 +72,7 @@ export class CommentListDto extends createZodDto(commentListSchema) {}
 export class ReactionSummaryDto extends createZodDto(reactionSummarySchema) {}
 export class TrendingTagListDto extends createZodDto(trendingTagListSchema) {}
 export class UploadResponseDto extends createZodDto(uploadResponseSchema) {}
+export class VoiceUploadResponseDto extends createZodDto(voiceUploadResponseSchema) {}
 export class PushConfigDto extends createZodDto(pushConfigSchema) {}
 
 // Activity and notifications

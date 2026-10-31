@@ -521,6 +521,8 @@ enum UploadKind {
   cover
   post
   message
+  group
+  voice
 
   @@map("upload_kind")
 }
@@ -531,15 +533,20 @@ model Upload {
   key       String     @id
   ownerId   String     @map("owner_id") @db.Uuid
   kind      UploadKind
-  /// Of the stored file (D2); null for files stored before, until the daily job read them.
-  width     Int?
-  height    Int?
-  bytes     Int?
-  createdAt DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  /// Of the stored file (D2); null for files stored before, until the daily job read them, and
+  /// always null for a voice message, which has a duration instead.
+  width      Int?
+  height     Int?
+  bytes      Int?
+  /// Of a voice message, read from the file at upload (ADR 0009 amendment "voice messages").
+  durationMs Int?       @map("duration_ms")
+  createdAt  DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  owner      User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  postImages PostImage[]
-  messages   Message[]
+  owner         User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  postImages    PostImage[]
+  messages      Message[]      @relation("MessageImage")
+  voiceMessages Message[]      @relation("MessageVoice")
+  conversations Conversation[]
 
   @@index([ownerId])
   @@index([createdAt])
@@ -727,15 +734,20 @@ model Conversation {
   createdById   String?          @map("created_by_id") @db.Uuid
   /// `<smaller user id>:<larger user id>` for direct conversations, so a pair has exactly one.
   directKey     String?          @unique @map("direct_key")
+  /// A group's picture (an upload of kind `group`, ADR 0009 amendment "group pictures"); null
+  /// again when the upload leaves with its owner's account.
+  pictureKey    String?          @map("picture_key")
   createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
   /// Denormalised from the newest message so the list can be ordered without a join.
   lastMessageAt DateTime?        @map("last_message_at") @db.Timestamptz(3)
 
   createdBy User?                @relation("ConversationCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  picture   Upload?              @relation(fields: [pictureKey], references: [key], onDelete: SetNull)
   members   ConversationMember[]
   messages  Message[]
 
   @@index([lastMessageAt, createdAt])
+  @@index([pictureKey])
   @@map("conversations")
 }
 
@@ -763,9 +775,13 @@ model Message {
   senderId       String      @map("sender_id") @db.Uuid
   /// `system` lines are written by the server about membership changes and renames.
   kind           MessageKind @default(user)
-  /// Empty when the message is a picture only, a system line or deleted.
+  /// Empty when the message is a picture, a post or a voice message only, a system line or deleted.
   content        String
   imageKey       String?     @map("image_key")
+  /// A voice message (an upload of kind `voice`), alone in the message; null once deleted.
+  voiceKey       String?     @map("voice_key")
+  /// The waveform the recorder measured, 0..1 per slice; empty on every other message.
+  voicePeaks     Float[]     @default([]) @map("voice_peaks")
   /// Null until the sender edited the text; previous texts live in message_revisions.
   editedAt       DateTime?   @map("edited_at") @db.Timestamptz(3)
   /// Soft delete by the sender: the row stays for ordering and read marks, content and picture go.
@@ -786,7 +802,8 @@ model Message {
   sender       User              @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
   revisions    MessageRevision[]
   reactions    MessageReaction[]
-  image        Upload?           @relation(fields: [imageKey], references: [key], onDelete: SetNull)
+  image        Upload?           @relation("MessageImage", fields: [imageKey], references: [key], onDelete: SetNull)
+  voice        Upload?           @relation("MessageVoice", fields: [voiceKey], references: [key], onDelete: SetNull)
   sharedPost   Post?             @relation("MessageSharedPost", fields: [sharedPostId], references: [id], onDelete: SetNull)
   replyTo      Message?          @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
   replies      Message[]         @relation("MessageReplies")
@@ -794,6 +811,7 @@ model Message {
   @@index([conversationId, createdAt, id])
   @@index([senderId])
   @@index([imageKey])
+  @@index([voiceKey])
   @@index([sharedPostId])
   @@index([replyToId])
   @@map("messages")

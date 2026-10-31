@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { PROFILE_PICTURE_SIZES, type UploadKind } from '@beso/shared';
+import { type ImageUploadKind, PROFILE_PICTURE_SIZES } from '@beso/shared';
 import sharp from 'sharp';
 import { badRequest, unsupportedMedia } from '../common/errors.js';
 import type { Env } from '../config/env.js';
@@ -14,11 +14,12 @@ type Preset = { width: number; height?: number; fit: 'cover' | 'inside'; quality
  * Avatars and covers come out at the shared frame sizes (the web cropper sends them at that
  * ratio already, so the `attention` crop below only acts on files uploaded uncropped).
  */
-export const PRESETS: Record<UploadKind, Preset> = {
+export const PRESETS: Record<ImageUploadKind, Preset> = {
   avatar: { ...PROFILE_PICTURE_SIZES.avatar, fit: 'cover', quality: 80 },
   cover: { ...PROFILE_PICTURE_SIZES.cover, fit: 'cover', quality: 80 },
   post: { width: 1920, height: 1920, fit: 'inside', quality: 82 },
   message: { width: 1600, height: 1600, fit: 'inside', quality: 82 },
+  group: { ...PROFILE_PICTURE_SIZES.group, fit: 'cover', quality: 80 },
 };
 
 export type ProcessedImage = {
@@ -41,7 +42,7 @@ export class ImageProcessor {
     this.maxPixels = config.get('UPLOAD_MAX_PIXELS', { infer: true });
   }
 
-  async process(input: Buffer, kind: UploadKind): Promise<ProcessedImage> {
+  async process(input: Buffer, kind: ImageUploadKind): Promise<ProcessedImage> {
     const format = await this.detectFormat(input);
     if (format === undefined || !ACCEPTED_FORMATS.has(format)) {
       throw unsupportedMedia('Unsupported image type', {

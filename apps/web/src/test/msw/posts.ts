@@ -429,6 +429,23 @@ export const postHandlers = [
     return HttpResponse.json(reactionsFor(commentId, userId));
   }),
 
+  http.post(`${API}/uploads/voice`, async ({ request }) => {
+    if (!mockDb.user) return unauthorized();
+    const file = (await request.formData()).get('file');
+    if (!file || typeof file === 'string') {
+      return apiError(400, 'VALIDATION_ERROR', 'Validation failed', { file: 'A file is required' });
+    }
+    mockDb.uploads += 1;
+    mockDb.lastUpload = { name: file.name, type: file.type, size: file.size };
+    const key = `voice/${testId('post', 900 + mockDb.uploads).replace('01a13f00', '0f0f0f0f')}.ogg`;
+    // The fake API "reads" three seconds from every clip.
+    mockDb.voiceDurations.set(key, 3000);
+    return HttpResponse.json(
+      { key, url: storedUrl(key), bytes: file.size, durationMs: 3000 },
+      { status: 201 },
+    );
+  }),
+
   http.post(`${API}/uploads`, async ({ request }) => {
     if (!mockDb.user) return unauthorized();
     const kind = new URL(request.url).searchParams.get('kind') ?? 'post';

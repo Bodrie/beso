@@ -12,6 +12,7 @@ import {
   type RenameGroupInput,
   type RevisionList,
   type SendMessageInput,
+  type SetGroupPictureInput,
   conversationListSchema,
   conversationSchema,
   markReadResultSchema,
@@ -48,6 +49,14 @@ export const leaveGroup = (id: string): Promise<void> =>
 /** Admins only. */
 export const renameGroup = (id: string, input: RenameGroupInput): Promise<Conversation> =>
   api.patch(`/conversations/${id}`, input, { schema: conversationSchema });
+
+/** Admins only: the group's picture, an upload made with kind `group`. */
+export const setGroupPicture = (id: string, input: SetGroupPictureInput): Promise<Conversation> =>
+  api.put(`/conversations/${id}/picture`, input, { schema: conversationSchema });
+
+/** Admins only. */
+export const removeGroupPicture = (id: string): Promise<Conversation> =>
+  api.delete(`/conversations/${id}/picture`, { schema: conversationSchema });
 
 /** Admins only. */
 export const removeMember = (id: string, userId: string): Promise<void> =>

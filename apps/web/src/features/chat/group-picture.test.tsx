@@ -17,8 +17,12 @@ const { cropImage } = vi.hoisted(() => ({
     ) => new File(['cropped'], `cropped-${source.name}`, { type: 'image/png' }),
   ),
 }));
-// Canvas drawing is out of jsdom's reach; the helper has tests of its own.
-vi.mock('@/features/uploads/crop-image', () => ({ cropImage }));
+// Canvas drawing is out of jsdom's reach; the helper has tests of its own. The rest of the
+// module (the fit zoom) is real.
+vi.mock('@/features/uploads/crop-image', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/features/uploads/crop-image')>()),
+  cropImage,
+}));
 
 /** jsdom loads no picture: this stand-in reports a frame at once so "Use this" is possible. */
 vi.mock('react-easy-crop', async () => {

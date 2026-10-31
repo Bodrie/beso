@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { RouterProvider, createMemoryRouter } from 'react-router';
 import { reloadForNewVersion } from '@/lib/new-version';
 import { RouteError } from './route-error';
@@ -30,7 +30,8 @@ describe('RouteError', () => {
       await screen.findByRole('heading', { name: 'A new version is available' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Reload' })).toBeInTheDocument();
-    expect(vi.mocked(reloadForNewVersion)).toHaveBeenCalledTimes(1);
+    // The reload is an effect of the render that shows the heading, flushed a task later.
+    await waitFor(() => expect(vi.mocked(reloadForNewVersion)).toHaveBeenCalledTimes(1));
   });
 
   it('keeps the generic message for any other failure', async () => {

@@ -999,4 +999,128 @@ describe('chat extras (C5): editing, reactions and the new system lines', () => 
     expect((await listFor(bobSession.agent)).items[0]?.unreadCount).toBe(0);
     bobSocket.close();
   });
+
+  it('lets admins set and remove a group picture, with system lines, and drops the replaced files', async () => {
+    const [alice, bob] = await Promise.all([createUser(t.prisma), createUser(t.prisma)]);
+    const aliceSession = await sessionFor(t, alice);
+    const bobSession = await sessionFor(t, bob);
+    const bobSocket = connect(t, { cookie: `access_token=${bobSession.token}` });
+    await connected(bobSocket);
+    const group = conversationSchema.parse(
+      (
+        await aliceSession.agent
+          .post('/api/v1/conversations')
+          .send({ title: 'Pictured', memberIds: [bob.id] })
+          .expect(201)
+      ).body,
+    );
+    expect(group.pictureUrl).toBeNull();
+    const direct = await directWith(aliceSession.agent, bob.id);
+    expect(direct.pictureUrl).toBeNull();
+
+    // Only an upload of kind `group`, only one's own, only by an admin, only on a group.
+    const avatar = await uploadPicture(aliceSession.agent, 'avatar');
+    const wrongKind = await aliceSession.agent
+      .put(`/api/v1/conversations/${group.id}/picture`)
+      .send({ pictureKey: avatar.key })
+      .expect(400);
+    expect(apiErrorSchema.parse(wrongKind.body).fields).toHaveProperty('pictureKey');
+    const bobs = await uploadPicture(bobSession.agent, 'group');
+    await bobSession.agent
+      .put(`/api/v1/conversations/${group.id}/picture`)
+      .send({ pictureKey: bobs.key })
+      .expect(403);
+    const notMine = await aliceSession.agent
+      .put(`/api/v1/conversations/${group.id}/picture`)
+      .send({ pictureKey: bobs.key })
+      .expect(400);
+    expect(apiErrorSchema.parse(notMine.body).fields).toEqual({ pictureKey: 'Unknown upload' });
+    const first = await uploadPicture(aliceSession.agent, 'group');
+    await aliceSession.agent
+      .put(`/api/v1/conversations/${direct.id}/picture`)
+      .send({ pictureKey: first.key })
+      .expect(400);
+
+    // The picture is framed like an avatar; setting it pushes the row and a line to everyone.
+    expect([first.width, first.height]).toEqual([512, 512]);
+    const bobUpdated = waitFor<unknown>(bobSocket, 'conversation:update');
+    const bobLine = waitFor<unknown>(bobSocket, 'message:new');
+    const pictured = conversationSchema.parse(
+      (
+        await aliceSession.agent
+          .put(`/api/v1/conversations/${group.id}/picture`)
+          .send({ pictureKey: first.key })
+          .expect(200)
+      ).body,
+    );
+    expect(pictured.pictureUrl).toBe(first.url);
+    expect(await bobUpdated).toEqual({ conversationId: group.id });
+    const line = messageSchema.parse(await bobLine);
+    expect(line).toMatchObject({
+      kind: 'system',
+      senderId: alice.id,
+      system: { type: 'picture_changed', actor: { id: alice.id }, users: [], title: null },
+    });
+    expect(pictured.lastMessage?.id).toBe(line.id);
+    expect((await listFor(bobSession.agent)).items[0]).toMatchObject({
+      id: group.id,
+      pictureUrl: first.url,
+      unreadCount: 0,
+    });
+
+    // A new picture drops the old file; the same key again changes nothing.
+    const second = await uploadPicture(aliceSession.agent, 'group');
+    await aliceSession.agent
+      .put(`/api/v1/conversations/${group.id}/picture`)
+      .send({ pictureKey: second.key })
+      .expect(200);
+    await request(t.server).get(`/api/v1/uploads/${first.key}`).expect(404);
+    await request(t.server).get(`/api/v1/uploads/${second.key}`).expect(200);
+    const same = conversationSchema.parse(
+      (
+        await aliceSession.agent
+          .put(`/api/v1/conversations/${group.id}/picture`)
+          .send({ pictureKey: second.key })
+          .expect(200)
+      ).body,
+    );
+    const history = messageListSchema.parse(
+      (await aliceSession.agent.get(`/api/v1/conversations/${group.id}/messages`).expect(200)).body,
+    );
+    expect(history.items.map((row) => row.system?.type)).toEqual([
+      'picture_changed',
+      'picture_changed',
+      'group_created',
+    ]);
+    expect(same.lastMessage?.id).toBe(history.items[0]?.id);
+
+    // Removing: members may not; the file goes; a group without a picture is a no-op.
+    await bobSession.agent.delete(`/api/v1/conversations/${group.id}/picture`).expect(403);
+    const removed = conversationSchema.parse(
+      (await aliceSession.agent.delete(`/api/v1/conversations/${group.id}/picture`).expect(200))
+        .body,
+    );
+    expect(removed.pictureUrl).toBeNull();
+    expect(removed.lastMessage).toMatchObject({
+      kind: 'system',
+      system: { type: 'picture_removed', actor: { id: alice.id } },
+    });
+    await request(t.server).get(`/api/v1/uploads/${second.key}`).expect(404);
+    const again = conversationSchema.parse(
+      (await aliceSession.agent.delete(`/api/v1/conversations/${group.id}/picture`).expect(200))
+        .body,
+    );
+    expect(again.lastMessage?.id).toBe(removed.lastMessage?.id);
+
+    // The last member out takes the picture's file with the group.
+    const third = await uploadPicture(aliceSession.agent, 'group');
+    await aliceSession.agent
+      .put(`/api/v1/conversations/${group.id}/picture`)
+      .send({ pictureKey: third.key })
+      .expect(200);
+    await bobSession.agent.delete(`/api/v1/conversations/${group.id}/members/me`).expect(204);
+    await aliceSession.agent.delete(`/api/v1/conversations/${group.id}/members/me`).expect(204);
+    await request(t.server).get(`/api/v1/uploads/${third.key}`).expect(404);
+    bobSocket.close();
+  });
 });

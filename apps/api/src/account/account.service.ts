@@ -333,7 +333,9 @@ export class AccountService {
         conversations: {
           select: {
             conversationId: true,
-            conversation: { select: { kind: true, members: { select: { userId: true } } } },
+            conversation: {
+              select: { kind: true, pictureKey: true, members: { select: { userId: true } } },
+            },
           },
         },
       },
@@ -341,12 +343,18 @@ export class AccountService {
 
     const removed: { id: string; others: string[] }[] = [];
     const left: { id: string; remaining: string[] }[] = [];
+    // Pictures of the groups that go with this account but were set by someone else: their
+    // uploads stay behind without a reference (the member's own files leave with the rows).
+    const ownKeys = new Set(user.uploads.map((upload) => upload.key));
+    const orphanedPictures: string[] = [];
     for (const membership of user.conversations) {
       const others = membership.conversation.members
         .map((member) => member.userId)
         .filter((memberId) => memberId !== userId);
       if (membership.conversation.kind === 'direct' || others.length === 0) {
         removed.push({ id: membership.conversationId, others });
+        const picture = membership.conversation.pictureKey;
+        if (picture !== null && !ownKeys.has(picture)) orphanedPictures.push(picture);
       } else {
         left.push({ id: membership.conversationId, remaining: others });
       }
@@ -402,5 +410,6 @@ export class AccountService {
         ),
     ]);
     await this.uploads.deleteFiles(user.uploads.map((upload) => upload.key));
+    await Promise.all(orphanedPictures.map((key) => this.uploads.discard(key)));
   }
 }

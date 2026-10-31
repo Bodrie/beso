@@ -6,6 +6,7 @@ import {
   replyRefSchema,
   sendMessagePayloadSchema,
   sendMessageSchema,
+  setGroupPictureSchema,
 } from './conversations.js';
 
 const ID = '01a13ed6-d3ec-71cb-b39f-fbc256a293b9';
@@ -101,5 +102,17 @@ describe('replies', () => {
     const quote = { id: ID, senderId: ID, excerpt: 'Lunch?', attachment: null, deleted: false };
     expect(replyRefSchema.parse(quote)).toEqual(quote);
     expect(replyRefSchema.parse({ unavailable: true })).toEqual({ unavailable: true });
+  });
+});
+
+describe('setGroupPictureSchema', () => {
+  it('takes an upload of kind "group" and nothing else', () => {
+    expect(setGroupPictureSchema.parse({ pictureKey: `group/${ID}.webp` })).toEqual({
+      pictureKey: `group/${ID}.webp`,
+    });
+    expect(setGroupPictureSchema.safeParse({ pictureKey: `avatar/${ID}.webp` }).success).toBe(
+      false,
+    );
+    expect(setGroupPictureSchema.safeParse({}).success).toBe(false);
   });
 });

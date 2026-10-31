@@ -19,6 +19,7 @@ export const PRESETS: Record<UploadKind, Preset> = {
   cover: { ...PROFILE_PICTURE_SIZES.cover, fit: 'cover', quality: 80 },
   post: { width: 1920, height: 1920, fit: 'inside', quality: 82 },
   message: { width: 1600, height: 1600, fit: 'inside', quality: 82 },
+  group: { ...PROFILE_PICTURE_SIZES.group, fit: 'cover', quality: 80 },
 };
 
 export type ProcessedImage = {

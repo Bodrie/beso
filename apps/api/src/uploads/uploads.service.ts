@@ -102,10 +102,10 @@ export class UploadsService {
   }
 
   /**
-   * Housekeeping (JobsService): uploads older than `before` that no profile, post or message
-   * ever attached. The rows go first, re-checking the references in the same statement so an
-   * attach racing the job is refused ("Unknown upload") rather than left pointing at nothing;
-   * the files follow, best effort. Returns the count.
+   * Housekeeping (JobsService): uploads older than `before` that no profile, post, message or
+   * group ever attached. The rows go first, re-checking the references in the same statement
+   * so an attach racing the job is refused ("Unknown upload") rather than left pointing at
+   * nothing; the files follow, best effort. Returns the count.
    */
   async deleteOrphans(before: Date): Promise<number> {
     const rows = await this.prisma.$queryRaw<{ key: string }[]>`
@@ -114,6 +114,7 @@ export class UploadsService {
         AND NOT EXISTS (SELECT 1 FROM users x WHERE x.avatar_key = u.key OR x.cover_key = u.key)
         AND NOT EXISTS (SELECT 1 FROM post_images p WHERE p.key = u.key)
         AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.image_key = u.key)
+        AND NOT EXISTS (SELECT 1 FROM conversations c WHERE c.picture_key = u.key)
       RETURNING u.key`;
     await this.deleteFiles(rows.map((row) => row.key));
     return rows.length;
@@ -163,12 +164,13 @@ export class UploadsService {
   async discard(key: string | null): Promise<void> {
     if (key === null) return;
     try {
-      const [profiles, posts, messages] = await Promise.all([
+      const [profiles, posts, messages, groups] = await Promise.all([
         this.prisma.user.count({ where: { OR: [{ avatarKey: key }, { coverKey: key }] } }),
         this.prisma.postImage.count({ where: { key } }),
         this.prisma.message.count({ where: { imageKey: key } }),
+        this.prisma.conversation.count({ where: { pictureKey: key } }),
       ]);
-      if (profiles + posts + messages > 0) return;
+      if (profiles + posts + messages + groups > 0) return;
       await this.storage.delete(key);
       await this.prisma.upload.deleteMany({ where: { key } });
     } catch (error) {

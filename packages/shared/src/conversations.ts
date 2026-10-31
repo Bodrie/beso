@@ -5,7 +5,7 @@ import { uuidSchema } from './common.js';
 import type { Activity } from './activities.js';
 import type { Notification } from './notifications.js';
 import { cursorQuerySchema, paginatedSchema } from './pagination.js';
-import { messageImageKeySchema, storedImageSchema } from './uploads.js';
+import { groupPictureKeySchema, messageImageKeySchema, storedImageSchema } from './uploads.js';
 import { userSummarySchema } from './users.js';
 
 export const MESSAGE_MAX_LENGTH = 2000;
@@ -28,7 +28,8 @@ export type MessageKind = z.infer<typeof messageKindSchema>;
 
 /**
  * What a system line is about: who joined, who left or was removed, the new name, who became
- * or stopped being an admin, that the group was created (ADR 0009 amendment 3).
+ * or stopped being an admin, that the group was created (ADR 0009 amendment 3), that the
+ * group's picture changed or was removed (amendment "group pictures").
  */
 export const SYSTEM_LINE_TYPES = [
   'members_added',
@@ -38,6 +39,8 @@ export const SYSTEM_LINE_TYPES = [
   'group_created',
   'admin_added',
   'admin_removed',
+  'picture_changed',
+  'picture_removed',
 ] as const;
 const personRefSchema = z.object({ id: z.uuid(), name: z.string() });
 export const systemLineSchema = z.object({
@@ -171,12 +174,14 @@ export type ConversationMember = z.infer<typeof conversationMemberSchema>;
 
 /**
  * A direct conversation is the one thread between two people (no title); a group has a
- * title and any number of members. `members` always includes the viewer.
+ * title, maybe a picture, and any number of members. `members` always includes the viewer.
  */
 export const conversationSchema = z.object({
   id: z.uuid(),
   kind: conversationKindSchema,
   title: z.string().nullable(),
+  /** A group's picture, set by its admins (an upload of kind `group`); null for a direct thread. */
+  pictureUrl: z.string().nullable(),
   createdById: z.uuid().nullable(),
   createdAt: z.iso.datetime(),
   lastMessageAt: z.iso.datetime().nullable(),
@@ -213,6 +218,10 @@ export type AddMembersInput = z.input<typeof addMembersSchema>;
 /** Admins only. */
 export const renameGroupSchema = z.object({ title: groupTitleSchema });
 export type RenameGroupInput = z.input<typeof renameGroupSchema>;
+
+/** Admins only: the group's picture, an upload made with `?kind=group`. */
+export const setGroupPictureSchema = z.object({ pictureKey: groupPictureKeySchema });
+export type SetGroupPictureInput = z.infer<typeof setGroupPictureSchema>;
 
 /** Admins only; demoting the last admin is refused. */
 export const setMemberRoleSchema = z.object({ role: conversationRoleSchema });

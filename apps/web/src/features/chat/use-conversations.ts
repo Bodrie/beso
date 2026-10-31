@@ -11,6 +11,7 @@ import type {
   Conversation,
   ConversationRole,
   RenameGroupInput,
+  SetGroupPictureInput,
 } from '@beso/shared';
 import {
   addMembers,
@@ -21,8 +22,10 @@ import {
   fetchConversations,
   fetchMessages,
   leaveGroup,
+  removeGroupPicture,
   removeMember,
   renameGroup,
+  setGroupPicture,
   setMemberRole,
 } from '@/lib/api/conversations';
 import { NO_CURSOR, type Pages, filterItems, flattenPages, mapItems } from '@/lib/infinite';
@@ -150,6 +153,18 @@ export function useAddMembers(conversationId: string) {
 /** Admins only. */
 export function useRenameGroup(conversationId: string) {
   return useConversationMutation((input: RenameGroupInput) => renameGroup(conversationId, input));
+}
+
+/** Admins only: the picture is an upload of kind `group` made by the caller. */
+export function useSetGroupPicture(conversationId: string) {
+  return useConversationMutation((input: SetGroupPictureInput) =>
+    setGroupPicture(conversationId, input),
+  );
+}
+
+/** Admins only. */
+export function useRemoveGroupPicture(conversationId: string) {
+  return useConversationMutation(() => removeGroupPicture(conversationId));
 }
 
 /** Admins only. */

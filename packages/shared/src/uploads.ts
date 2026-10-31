@@ -1,12 +1,13 @@
 import { z } from 'zod';
 
-export const UPLOAD_KINDS = ['avatar', 'cover', 'post', 'message'] as const;
+/** `group` is a group chat's picture (ADR 0009 amendment "group pictures"), framed like an avatar. */
+export const UPLOAD_KINDS = ['avatar', 'cover', 'post', 'message', 'group'] as const;
 export const uploadKindSchema = z.enum(UPLOAD_KINDS);
 export type UploadKind = z.infer<typeof uploadKindSchema>;
 
 /** Storage keys are `<kind>/<uuid>.webp`; every upload is re-encoded to WebP. */
 export const UPLOAD_KEY_PATTERN =
-  /^(avatar|cover|post|message)\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.webp$/;
+  /^(avatar|cover|post|message|group)\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.webp$/;
 export const uploadKeySchema = z.string().regex(UPLOAD_KEY_PATTERN, 'Invalid upload key');
 
 const keyOfKind = (kind: UploadKind) =>
@@ -19,6 +20,7 @@ export const avatarKeySchema = keyOfKind('avatar');
 export const coverKeySchema = keyOfKind('cover');
 export const postImageKeySchema = keyOfKind('post');
 export const messageImageKeySchema = keyOfKind('message');
+export const groupPictureKeySchema = keyOfKind('group');
 
 export const uploadQuerySchema = z.object({ kind: uploadKindSchema });
 
@@ -46,11 +48,13 @@ export type StoredImage = z.infer<typeof storedImageSchema>;
 /**
  * The frames the profile pictures are shown in: the API resizes every avatar and cover to
  * exactly these sizes and the web cropper offers the same ratios (1:1 and 3:1), so what a
- * member frames is what the page shows, with no second crop by the browser.
+ * member frames is what the page shows, with no second crop by the browser. A group chat's
+ * picture takes the avatar's frame.
  */
 export const PROFILE_PICTURE_SIZES = {
   avatar: { width: 512, height: 512 },
   cover: { width: 1800, height: 600 },
+  group: { width: 512, height: 512 },
 } as const;
 export type ProfilePictureKind = keyof typeof PROFILE_PICTURE_SIZES;
 

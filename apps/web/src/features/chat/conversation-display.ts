@@ -90,8 +90,8 @@ export function listNames(names: readonly string[]): string {
 
 /**
  * The sentence of a system line: "Alice added Bob", "Bob left", "You removed Carol",
- * "Alice renamed the group to “Trip”". People still in the conversation are called by their
- * current name; the others by the name stored with the line.
+ * "Alice renamed the group to “Trip”", "Alice changed the group picture". People still in the
+ * conversation are called by their current name; the others by the name stored with the line.
  */
 export function systemLineText(line: SystemLine, conversation: Conversation, meId: string): string {
   const nameOf = (person: { id: string; name: string }, subject: boolean): string => {
@@ -115,6 +115,10 @@ export function systemLineText(line: SystemLine, conversation: Conversation, meI
       return `${actor} made ${people} an admin`;
     case 'admin_removed':
       return `${actor} removed ${people} as admin`;
+    case 'picture_changed':
+      return `${actor} changed the group picture`;
+    case 'picture_removed':
+      return `${actor} removed the group picture`;
     default:
       return '';
   }

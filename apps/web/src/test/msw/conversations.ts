@@ -9,6 +9,7 @@ import {
   renameGroupSchema,
   type Revision,
   sendMessageSchema,
+  setGroupPictureSchema,
   setMemberRoleSchema,
   type SystemLine,
 } from '@beso/shared';
@@ -47,6 +48,7 @@ export function conversationFor(viewerId: string, row: MockConversation): Conver
     id: row.id,
     kind: row.kind,
     title: row.title,
+    pictureUrl: row.pictureUrl,
     createdById: row.createdById,
     createdAt: row.createdAt,
     lastMessageAt: messages[0]?.createdAt ?? null,
@@ -224,6 +226,46 @@ export const conversationHandlers = [
         actor: personOf(me),
         users: [],
         title: body.title,
+      });
+    }
+    return HttpResponse.json(conversationFor(me, row));
+  }),
+
+  http.put(`${API}/conversations/:id/picture`, async ({ request, params }) => {
+    if (!mockDb.user) return unauthorized();
+    const me = mockDb.user.id;
+    const row = memberRow(me, param(params.id));
+    if (!row) return notFound();
+    if (row.kind !== 'group') return apiError(400, 'BAD_REQUEST', 'Only groups have a member list');
+    if (!isAdmin(row, me)) return forbidden();
+    const body = setGroupPictureSchema.parse(await request.json());
+    const url = `http://localhost/api/v1/uploads/${body.pictureKey}`;
+    if (row.pictureUrl !== url) {
+      row.pictureUrl = url;
+      storeSystemLine(row.id, me, {
+        type: 'picture_changed',
+        actor: personOf(me),
+        users: [],
+        title: null,
+      });
+    }
+    return HttpResponse.json(conversationFor(me, row));
+  }),
+
+  http.delete(`${API}/conversations/:id/picture`, ({ params }) => {
+    if (!mockDb.user) return unauthorized();
+    const me = mockDb.user.id;
+    const row = memberRow(me, param(params.id));
+    if (!row) return notFound();
+    if (row.kind !== 'group') return apiError(400, 'BAD_REQUEST', 'Only groups have a member list');
+    if (!isAdmin(row, me)) return forbidden();
+    if (row.pictureUrl !== null) {
+      row.pictureUrl = null;
+      storeSystemLine(row.id, me, {
+        type: 'picture_removed',
+        actor: personOf(me),
+        users: [],
+        title: null,
       });
     }
     return HttpResponse.json(conversationFor(me, row));

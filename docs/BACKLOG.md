@@ -41,7 +41,7 @@ Nothing tells anyone today when something breaks. Docker health checks only mark
 ## Ideas not in the agreed order (2026-10-22)
 - **Weekly digest** (F4 in `IMPLEMENTATION_PLAN.md`, owner 2026-10-23: not for now) – the Monday mail for members away three days, as planned there. Open points when picked up: the Resend plan's daily cap (every digest falls on Monday morning), the fallback for members without a time zone, the privacy-notice line. The frequent jobs it runs on exist since F3.
 From the ideas round that produced Track F of `IMPLEMENTATION_PLAN.md` (the newcomer experience that stood here is F1 and F2's Getting started checklist now). Trigger for each: members asking, or a gap between slices.
-- **Chat**: forward, pin a message, search inside a thread; voice notes stay under Web. (Replies to a message shipped as R6 on 2026-10-23.)
+- **Chat**: forward, pin a message, search inside a thread; voice notes stay under Web; a picture on the "New group" form (admins set one from the members dialog since R11, 2026-10-31, so the creation form stays name and members). (Replies to a message shipped as R6 on 2026-10-23.)
 - **Posts and profiles**: content warnings and spoilers, drafts and scheduled posts. (The pinned post and double tap to like shipped as R6 on 2026-10-23.)
 - **Communities**: groups with their own feed, members and moderators, once one shared feed gets crowded (XL).
 - **Games beyond F6**: ratings and leaderboards; checkers, backgammon, a daily word puzzle, battleship (listed in F6 as the later games).

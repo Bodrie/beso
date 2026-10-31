@@ -36,6 +36,7 @@ import { useCurrentUser } from '@/features/auth/current-user';
 import { isApiClientError } from '@/lib/api/client';
 import { useChat } from './chat-context';
 import { isAdmin } from './conversation-display';
+import { GroupPictureField } from './group-picture-field';
 import { GroupTitleEditor } from './group-title-editor';
 import { PeoplePicker } from './people-picker';
 import { PresenceDot } from './presence-dot';
@@ -53,7 +54,8 @@ const errorMessage = (error: unknown, fallback: string, field?: string): string 
 
 /**
  * Who is in the group, with a way to bring people in and a way out. Admins also rename the
- * group, remove people and hand the admin role on (the server refuses demoting the last one).
+ * group, give it a picture, remove people and hand the admin role on (the server refuses
+ * demoting the last one).
  */
 export function GroupMembersDialog({ conversation, children }: GroupMembersDialogProps) {
   const [open, setOpen] = useState(false);
@@ -121,13 +123,14 @@ export function GroupMembersDialog({ conversation, children }: GroupMembersDialo
       }}
     >
       <DialogTrigger asChild>{children}</DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{conversation.title}</DialogTitle>
           <DialogDescription>
             {conversation.members.length} {conversation.members.length === 1 ? 'member' : 'members'}
           </DialogDescription>
         </DialogHeader>
+        {admin ? <GroupPictureField conversation={conversation} /> : null}
         {renaming ? (
           <GroupTitleEditor conversation={conversation} onDone={() => setRenaming(false)} />
         ) : null}

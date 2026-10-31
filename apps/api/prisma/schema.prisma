@@ -521,6 +521,7 @@ enum UploadKind {
   cover
   post
   message
+  group
 
   @@map("upload_kind")
 }
@@ -537,9 +538,10 @@ model Upload {
   bytes     Int?
   createdAt DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  owner      User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  postImages PostImage[]
-  messages   Message[]
+  owner         User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  postImages    PostImage[]
+  messages      Message[]
+  conversations Conversation[]
 
   @@index([ownerId])
   @@index([createdAt])
@@ -727,15 +729,20 @@ model Conversation {
   createdById   String?          @map("created_by_id") @db.Uuid
   /// `<smaller user id>:<larger user id>` for direct conversations, so a pair has exactly one.
   directKey     String?          @unique @map("direct_key")
+  /// A group's picture (an upload of kind `group`, ADR 0009 amendment "group pictures"); null
+  /// again when the upload leaves with its owner's account.
+  pictureKey    String?          @map("picture_key")
   createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
   /// Denormalised from the newest message so the list can be ordered without a join.
   lastMessageAt DateTime?        @map("last_message_at") @db.Timestamptz(3)
 
   createdBy User?                @relation("ConversationCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  picture   Upload?              @relation(fields: [pictureKey], references: [key], onDelete: SetNull)
   members   ConversationMember[]
   messages  Message[]
 
   @@index([lastMessageAt, createdAt])
+  @@index([pictureKey])
   @@map("conversations")
 }
 

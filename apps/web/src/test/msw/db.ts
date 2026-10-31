@@ -24,6 +24,7 @@ export type MockConversation = {
   id: string;
   kind: ConversationKind;
   title: string | null;
+  pictureUrl: string | null;
   createdById: string | null;
   createdAt: string;
   members: {
@@ -171,7 +172,12 @@ export function seedFollow(followerId: string, followingId: string): void {
 export function seedConversation(
   kind: ConversationKind,
   memberIds: string[],
-  options: { title?: string; createdById?: string; createdAt?: string } = {},
+  options: {
+    title?: string;
+    pictureUrl?: string | null;
+    createdById?: string;
+    createdAt?: string;
+  } = {},
 ): MockConversation {
   conversationSequence += 1;
   const createdAt = options.createdAt ?? '2026-10-15T08:00:00.000Z';
@@ -180,6 +186,7 @@ export function seedConversation(
     id: testId('conversation', conversationSequence),
     kind,
     title: options.title ?? null,
+    pictureUrl: options.pictureUrl ?? null,
     createdById,
     createdAt,
     // Like the API: the creator of a group is its admin.

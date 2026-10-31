@@ -34,6 +34,7 @@ function conversation(
     id: '01a14300-0000-7000-8000-000000000001',
     kind,
     title,
+    pictureUrl: null,
     createdById: alice.id,
     createdAt: T0,
     lastMessageAt: T1,
@@ -123,6 +124,12 @@ describe('systemLineText / messagePreview', () => {
     expect(
       systemLineText(line('admin_removed', [{ id: bob.id, name: 'B' }]), group, alice.id),
     ).toBe('You removed Bob Brown as admin');
+    expect(systemLineText(line('picture_changed'), group, bob.id)).toBe(
+      'Alice Anderson changed the group picture',
+    );
+    expect(systemLineText(line('picture_removed'), group, alice.id)).toBe(
+      'You removed the group picture',
+    );
   });
 
   it("sums a message's reactions from the viewer's side", () => {

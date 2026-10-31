@@ -5,6 +5,9 @@ describe('uploadKeySchema', () => {
     expect(
       uploadKeySchema.safeParse('avatar/01a13ed6-d3ec-71cb-b39f-fbc256a293b9.webp').success,
     ).toBe(true);
+    expect(
+      uploadKeySchema.safeParse('group/01a13ed6-d3ec-71cb-b39f-fbc256a293b9.webp').success,
+    ).toBe(true);
     for (const bad of [
       'avatar/01a13ed6-d3ec-71cb-b39f-fbc256a293b9.png',
       'other/01a13ed6-d3ec-71cb-b39f-fbc256a293b9.webp',

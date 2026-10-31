@@ -131,6 +131,32 @@ describe('chat follow-ups', () => {
     await user.keyboard('{Escape}');
   });
 
+  it('leaves the rename field behind when another chat is opened', async () => {
+    signedInAs(alice);
+    const group = seedConversation('group', [alice.id, bob.id], { title: 'Trip' });
+    const withBob = seedDirect(alice.id, bob.id);
+    const hi = makeMessage(withBob.id, bob.id, 'Hi there');
+    mockDb.messages.push(hi);
+    seedReadMark(withBob.id, alice.id, hi.createdAt);
+    renderApp(`/messages/${group.id}`);
+    const user = userEvent.setup();
+    await screen.findByRole('log', { name: 'Group Trip' });
+    await user.click(screen.getByRole('button', { name: 'Rename group' }));
+    expect(screen.getByRole('textbox', { name: 'Group name' })).toBeInTheDocument();
+
+    await user.click(within(list()).getByRole('link', { name: /Bob Brown/ }));
+    expect(
+      await screen.findByRole('log', { name: 'Conversation with Bob Brown' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'Group name' })).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Bob Brown' })).toBeInTheDocument();
+    // Back in the group the field is closed too.
+    await user.click(within(list()).getByRole('link', { name: /Trip/ }));
+    await screen.findByRole('log', { name: 'Group Trip' });
+    expect(screen.queryByRole('textbox', { name: 'Group name' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Rename group' })).toBeInTheDocument();
+  });
+
   it('shows a plain member neither the rename field nor the member options', async () => {
     signedInAs(bob);
     const group = seedConversation('group', [alice.id, bob.id], { title: 'Trip' });

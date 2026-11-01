@@ -14,8 +14,12 @@ const { cropImage } = vi.hoisted(() => ({
     ) => new File(['cropped'], `cropped-${source.name}`, { type: 'image/png' }),
   ),
 }));
-// Canvas drawing is out of jsdom's reach; the helper has tests of its own.
-vi.mock('@/features/uploads/crop-image', () => ({ cropImage }));
+// Canvas drawing is out of jsdom's reach; the helper has tests of its own. The rest of the
+// module (the fit zoom) is real.
+vi.mock('@/features/uploads/crop-image', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/features/uploads/crop-image')>()),
+  cropImage,
+}));
 
 /**
  * jsdom never loads the picture, so the real cropper would never measure it. This stand-in
@@ -50,7 +54,8 @@ vi.mock('react-easy-crop', async () => {
     const frame = useRef<HTMLDivElement | null>(null);
     useEffect(() => {
       setCropperRef?.(frame);
-      onMediaLoaded?.({});
+      // A 3:1 picture: it covers the cover's frame exactly and fits a third of the way into the avatar's.
+      onMediaLoaded?.({ naturalWidth: 1200, naturalHeight: 400 });
     }, [setCropperRef, onMediaLoaded]);
     useEffect(() => {
       const width = Math.round(600 / zoom);
@@ -171,6 +176,32 @@ describe('EditProfileDialog', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Save changes' }));
     await waitFor(() => expect(mockDb.user?.avatarUrl).toMatch(/uploads\/avatar\//));
     expect(await screen.findByText('Profile updated')).toBeInTheDocument();
+  });
+
+  it('zooms out to fit the whole picture inside the frame', async () => {
+    signedInAs(alice);
+    renderApp('/u/alice');
+    const { user, dialog } = await openDialog();
+
+    const file = new File(['png-bytes'], 'wide.png', { type: 'image/png' });
+    await user.upload(within(dialog).getByLabelText('Choose avatar'), file);
+    const frame = await within(dialog).findByRole('application', { name: 'Avatar position' });
+    // A 3:1 picture in a square frame: "Fit" zooms out to a third, and that is as far as it goes.
+    await user.click(within(dialog).getByRole('button', { name: 'Fit the whole picture' }));
+    expect(frame).toHaveAttribute('data-zoom', '0.33');
+    expect(within(dialog).getByRole('slider', { name: 'Zoom' })).toHaveAttribute('min', '0.33');
+    expect(within(dialog).getByRole('button', { name: 'Zoom out' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Fit the whole picture' })).toBeDisabled();
+    await user.click(within(dialog).getByRole('button', { name: 'Use this' }));
+
+    await waitFor(() => expect(mockDb.uploads).toBe(1));
+    // The framed area reaches past the picture on every side; the helper fills what it leaves bare.
+    expect(cropImage).toHaveBeenLastCalledWith(
+      expect.any(String),
+      { x: -609, y: -203, width: 1818, height: 606 },
+      { width: 512, height: 512 },
+      file,
+    );
   });
 
   it('frames the cover at 3:1', async () => {

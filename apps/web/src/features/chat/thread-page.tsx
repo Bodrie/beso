@@ -77,5 +77,7 @@ export function ThreadPage() {
       />
     );
   }
-  return <Thread conversation={conversation.data} />;
+  // Keyed by conversation: the rename field, a reply in progress, the draft and the "new
+  // messages" pill belong to one thread and must not follow the viewer into the next one.
+  return <Thread key={conversation.data.id} conversation={conversation.data} />;
 }

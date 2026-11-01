@@ -117,6 +117,8 @@ export class VoiceRecorder {
       await this.release();
       throw new Error('Not recording');
     }
+    // The last slice, however short: a waveform always has at least one value.
+    this.sample(elapsedMs);
     try {
       await recorder.stop();
       const data = await encoded;
@@ -149,14 +151,23 @@ export class VoiceRecorder {
 
   private tick(): void {
     const elapsedMs = performance.now() - this.startedAt;
-    const level = this.measure();
-    const slice = Math.min(VOICE_LIMITS.maxPeaks - 1, Math.floor(elapsedMs / SLICE_MS));
-    this.slices[slice] = Math.max(this.slices[slice] ?? 0, level);
+    const level = this.sample(elapsedMs);
     this.onTick({ elapsedMs, level });
     if (elapsedMs >= VOICE_LIMITS.maxDurationMs && !this.limitReached) {
       this.limitReached = true;
       this.onLimit();
     }
+  }
+
+  /** Measures the microphone now and keeps the loudest reading of the slice `elapsedMs` falls in. */
+  private sample(elapsedMs: number): number {
+    const level = this.measure();
+    const slice = Math.min(
+      VOICE_LIMITS.maxPeaks - 1,
+      Math.max(0, Math.floor(elapsedMs / SLICE_MS)),
+    );
+    this.slices[slice] = Math.max(this.slices[slice] ?? 0, level);
+    return level;
   }
 
   /** The loudness of the last frames, 0 to 1 (root mean square of the samples). */

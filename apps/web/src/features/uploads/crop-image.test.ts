@@ -1,10 +1,12 @@
-import { cropImage } from './crop-image';
+import { cropImage, fitZoom } from './crop-image';
 
 /** jsdom loads no pictures: a stand-in that "loads" as soon as it gets a source. */
 class FakeImage extends EventTarget {
   static fails = false;
-  naturalWidth = 1200;
-  naturalHeight = 400;
+  /** Large enough for the framed areas below, unless a test shrinks it. */
+  static size = { width: 4000, height: 1500 };
+  naturalWidth = FakeImage.size.width;
+  naturalHeight = FakeImage.size.height;
   #src = '';
   get src() {
     return this.#src;
@@ -16,11 +18,24 @@ class FakeImage extends EventTarget {
 }
 
 const drawImage = vi.fn();
-const context = { drawImage, imageSmoothingQuality: 'low' };
+const fillRect = vi.fn();
+const context = {
+  drawImage,
+  fillRect,
+  save: vi.fn(),
+  restore: vi.fn(),
+  filter: 'none',
+  fillStyle: '',
+  imageSmoothingQuality: 'low',
+};
 
 beforeEach(() => {
   FakeImage.fails = false;
+  FakeImage.size = { width: 4000, height: 1500 };
   drawImage.mockClear();
+  fillRect.mockClear();
+  context.filter = 'none';
+  context.fillStyle = '';
   context.imageSmoothingQuality = 'low';
   vi.stubGlobal('Image', FakeImage);
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
@@ -81,6 +96,38 @@ describe('cropImage', () => {
     expect(await file.text()).toBe('300x100');
   });
 
+  it('fills the room around a picture zoomed out to fit with a blurred, dimmed copy of it', async () => {
+    FakeImage.size = { width: 1200, height: 400 };
+    const file = await cropImage(
+      'blob:picture',
+      // Twice the picture in both directions, centred: the member zoomed out past the frame.
+      { x: -600, y: -300, width: 2400, height: 1200 },
+      { width: 1800, height: 600 },
+      { name: 'wide.jpg', type: 'image/jpeg' },
+    );
+
+    // The backdrop: the whole picture scaled to cover the 1200×600 canvas with some overshoot.
+    expect(drawImage).toHaveBeenNthCalledWith(1, expect.any(FakeImage), -390, -30, 1980, 660);
+    expect(context.filter).toBe('blur(30px)');
+    expect(context.fillStyle).toBe('rgba(0, 0, 0, 0.35)');
+    expect(fillRect).toHaveBeenCalledWith(0, 0, 1200, 600);
+    // The picture itself, whole, in the middle of the frame at the area's scale.
+    expect(drawImage).toHaveBeenNthCalledWith(
+      2,
+      expect.any(FakeImage),
+      0,
+      0,
+      1200,
+      400,
+      300,
+      150,
+      600,
+      200,
+    );
+    expect(file.type).toBe('image/jpeg');
+    expect(await file.text()).toBe('1200x600');
+  });
+
   it('rejects a picture the browser cannot read', async () => {
     FakeImage.fails = true;
     await expect(
@@ -92,5 +139,22 @@ describe('cropImage', () => {
       ),
     ).rejects.toThrow('could not be read');
     expect(drawImage).not.toHaveBeenCalled();
+  });
+});
+
+describe('fitZoom', () => {
+  it('is the zoom at which the whole picture sits inside the frame, rounded down, 1 when it covers it', () => {
+    const square = { width: 512, height: 512 };
+    const wide = { width: 1800, height: 600 };
+    expect(fitZoom(square, { naturalWidth: 1200, naturalHeight: 400 })).toBe(0.33);
+    expect(fitZoom(square, { naturalWidth: 400, naturalHeight: 1200 })).toBe(0.33);
+    expect(fitZoom(wide, { naturalWidth: 1200, naturalHeight: 400 })).toBe(1);
+    expect(fitZoom(wide, { naturalWidth: 1000, naturalHeight: 1000 })).toBe(0.33);
+    expect(fitZoom(square, { naturalWidth: 800, naturalHeight: 800 })).toBe(1);
+    // Not measured yet, or nonsense: no zooming out.
+    expect(fitZoom(square, {})).toBe(1);
+    expect(fitZoom(square, { naturalWidth: 0, naturalHeight: 10 })).toBe(1);
+    // Never below a tenth, however thin the picture.
+    expect(fitZoom(square, { naturalWidth: 10_000, naturalHeight: 10 })).toBe(0.1);
   });
 });

@@ -1,4 +1,5 @@
 import {
+  MESSAGE_MAX_IMAGES,
   SOCKET_EVENTS,
   apiErrorSchema,
   conversationListSchema,
@@ -361,10 +362,16 @@ describe('chat', () => {
     );
     expect(ack.ok).toBe(true);
     if (!ack.ok) return;
-    // The picture comes with its size (D2); `imageUrl` stays for tabs opened before.
+    // The single `imageKey` is how a tab opened before `imageKeys` sends one: it still works,
+    // and such a tab still reads `image` and `imageUrl`, the first of the pictures.
     const image = { url: picture.url, width: picture.width, height: picture.height };
-    expect(ack.message).toMatchObject({ content: '', image, imageUrl: picture.url });
-    expect(messageSchema.parse(await bobReceives).image).toEqual(image);
+    expect(ack.message).toMatchObject({
+      content: '',
+      images: [image],
+      image,
+      imageUrl: picture.url,
+    });
+    expect(messageSchema.parse(await bobReceives).images).toEqual([image]);
 
     // Text and picture together over HTTP; the picture shows up in history and the list.
     const both = await uploadPicture(aliceSession.agent, 'message');
@@ -372,22 +379,22 @@ describe('chat', () => {
       (
         await aliceSession.agent
           .post(`/api/v1/conversations/${direct.id}/messages`)
-          .send({ content: ' look ', imageKey: both.key })
+          .send({ content: ' look ', imageKeys: [both.key] })
           .expect(201)
       ).body,
     );
     expect(viaHttp).toMatchObject({
       content: 'look',
-      image: { url: both.url },
+      images: [{ url: both.url }],
       imageUrl: both.url,
     });
     const history = messageListSchema.parse(
       (await bobSession.agent.get(`/api/v1/conversations/${direct.id}/messages`).expect(200)).body,
     );
-    expect(history.items[0]).toMatchObject({ id: viaHttp.id, imageUrl: both.url });
+    expect(history.items[0]).toMatchObject({ id: viaHttp.id, images: [{ url: both.url }] });
     expect((await listFor(bobSession.agent)).items[0]?.lastMessage).toMatchObject({
       id: viaHttp.id,
-      imageUrl: both.url,
+      images: [{ url: both.url }],
     });
 
     // Neither text nor picture.
@@ -412,6 +419,97 @@ describe('chat', () => {
       .send({ imageKey: bobsPicture.key })
       .expect(400);
     expect(apiErrorSchema.parse(notMine.body).fields).toEqual({ imageKey: 'Unknown upload' });
+  });
+
+  it('sends several pictures as one message, in the order given, and takes them back together', async () => {
+    const bobSocket = connect(t, { token: bobSession.token });
+    sockets.push(bobSocket);
+    await connected(bobSocket);
+    const direct = await directWith(aliceSession.agent, bob.id);
+    const send = (body: object) =>
+      aliceSession.agent.post(`/api/v1/conversations/${direct.id}/messages`).send(body);
+    const one = await uploadPicture(aliceSession.agent, 'message');
+    const two = await uploadPicture(aliceSession.agent, 'message');
+    const three = await uploadPicture(aliceSession.agent, 'message');
+    const sizeOf = (upload: typeof one) => ({
+      url: upload.url,
+      width: upload.width,
+      height: upload.height,
+    });
+
+    // Not in the order they were uploaded: the order of the keys is the order shown.
+    const pushed = waitFor<unknown>(bobSocket, SOCKET_EVENTS.messageNew);
+    const sent = messageSchema.parse(
+      (await send({ content: 'three', imageKeys: [three.key, one.key, two.key] }).expect(201)).body,
+    );
+    expect(sent.images).toEqual([sizeOf(three), sizeOf(one), sizeOf(two)]);
+    // A tab opened before this shows the first.
+    expect(sent).toMatchObject({ image: sizeOf(three), imageUrl: three.url });
+    expect(messageSchema.parse(await pushed)).toEqual(sent);
+    const history = messageListSchema.parse(
+      (await bobSession.agent.get(`/api/v1/conversations/${direct.id}/messages`).expect(200)).body,
+    );
+    expect(history.items[0]).toEqual(sent);
+    expect((await listFor(bobSession.agent)).items[0]?.lastMessage).toEqual(sent);
+
+    // Without text they are still a message; an answer quotes it as a picture.
+    const bare = await uploadPicture(aliceSession.agent, 'message');
+    const noText = messageSchema.parse((await send({ imageKeys: [bare.key] }).expect(201)).body);
+    expect(noText).toMatchObject({ content: '', images: [sizeOf(bare)] });
+    const answer = messageSchema.parse(
+      (
+        await bobSession.agent
+          .post(`/api/v1/conversations/${direct.id}/messages`)
+          .send({ content: 'nice', replyToId: sent.id })
+          .expect(201)
+      ).body,
+    );
+    expect(answer.replyTo).toMatchObject({ id: sent.id, excerpt: 'three', attachment: 'picture' });
+
+    // The same picture twice, more than a message takes, and somebody else's are refused.
+    const twice = await send({ imageKeys: [bare.key, bare.key] }).expect(400);
+    expect(apiErrorSchema.parse(twice.body).fields).toHaveProperty('imageKeys');
+    const tooMany = await send({
+      imageKeys: Array.from(
+        { length: MESSAGE_MAX_IMAGES + 1 },
+        (_, index) => `message/0199b6a0-0000-7000-8000-${String(index).padStart(12, '0')}.webp`,
+      ),
+    }).expect(400);
+    expect(apiErrorSchema.parse(tooMany.body).fields).toEqual({
+      imageKeys: `At most ${MESSAGE_MAX_IMAGES} pictures`,
+    });
+    const bobs = await uploadPicture(bobSession.agent, 'message');
+    const notMine = await send({ imageKeys: [one.key, bobs.key] }).expect(400);
+    expect(apiErrorSchema.parse(notMine.body).fields).toEqual({ imageKeys: 'Unknown upload' });
+    // An empty list is no picture at all.
+    await send({ imageKeys: [] }).expect(400);
+
+    // Deleting the message takes every picture with it: the rows and the files.
+    const deleted = messageSchema.parse(
+      (
+        await aliceSession.agent
+          .delete(`/api/v1/conversations/${direct.id}/messages/${sent.id}`)
+          .expect(200)
+      ).body,
+    );
+    expect(deleted).toMatchObject({ content: '', images: [], image: null, imageUrl: null });
+    expect(await t.prisma.messageImage.count({ where: { messageId: sent.id } })).toBe(0);
+    for (const upload of [one, two, three]) {
+      // oxlint-disable-next-line no-await-in-loop -- three requests, one after another
+      await request(t.server).get(`/api/v1/uploads/${upload.key}`).expect(404);
+    }
+    expect(
+      await t.prisma.upload.count({ where: { key: { in: [one.key, two.key, three.key] } } }),
+    ).toBe(0);
+    // The other message's picture is untouched, and its quote of the deleted one says so.
+    await request(t.server).get(`/api/v1/uploads/${bare.key}`).expect(200);
+    const after = messageListSchema.parse(
+      (await bobSession.agent.get(`/api/v1/conversations/${direct.id}/messages`).expect(200)).body,
+    );
+    expect(after.items.find((item) => item.id === answer.id)?.replyTo).toMatchObject({
+      attachment: null,
+      deleted: true,
+    });
   });
 
   it('sends voice messages: Opus the browser encoded, alone, at most 30 seconds', async () => {
@@ -778,7 +876,7 @@ describe('chat follow-ups (B3b): pagination, deletion, roles and system lines', 
           .expect(200)
       ).body,
     );
-    expect(deleted).toMatchObject({ id: message.id, content: '', image: null, imageUrl: null });
+    expect(deleted).toMatchObject({ id: message.id, content: '', images: [], imageUrl: null });
     expect(deleted.deletedAt).not.toBeNull();
     expect(messageSchema.parse(await pushed)).toEqual(deleted);
 

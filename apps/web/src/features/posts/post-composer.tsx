@@ -28,7 +28,7 @@ const PollEditor = lazy(async () => ({ default: (await import('./poll-editor')).
 export function PostComposer() {
   const me = useCurrentUser();
   const createPost = useCreatePost();
-  const images = useImageUploads('post', POST_MAX_IMAGES);
+  const images = useImageUploads('post', POST_MAX_IMAGES, 'post');
   const [content, setContent] = useState('');
   const [poll, setPoll] = useState<PollDraft | null>(null);
   const [pollProblem, setPollProblem] = useState<string | null>(null);

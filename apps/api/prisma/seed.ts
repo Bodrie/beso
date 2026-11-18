@@ -92,6 +92,20 @@ async function seedPostImages(
   });
 }
 
+/** Pictures for a chat message: generated files of the sender's, as the rows that attach them. */
+async function seedMessageImages(
+  senderId: string,
+  pictures: { caption: string; width: number; height: number }[],
+): Promise<{ position: number; key: string }[]> {
+  const rows: { position: number; key: string }[] = [];
+  for (const [position, { caption, ...size }] of pictures.entries()) {
+    // The caption leads the seed of the colour, so the pictures of one message differ.
+    const image = await placeholderPostImage(caption, `${caption}-${senderId}`, size);
+    rows.push({ position, key: await seedFile('message', senderId, image) });
+  }
+  return rows;
+}
+
 /** Usernames must satisfy the shared rule (lowercase letters, digits, underscores) and be unique. */
 function seedUsername(raw: string, taken: Set<string>): string {
   const base =
@@ -633,17 +647,33 @@ async function seed(): Promise<void> {
         data: { replyToId: asked.id, isReply: true },
       });
     }
-    // One picture from Bob, so the demo thread shows what a photo message looks like.
+    // Three pictures from Alice in one message, so the demo thread shows a pile of them...
+    await prisma.message.create({
+      data: {
+        conversationId: direct.id,
+        senderId: alice.id,
+        content: 'From the weekend',
+        images: {
+          create: await seedMessageImages(alice.id, [
+            { caption: 'Saturday', width: 960, height: 1280 },
+            { caption: 'Sunday', width: 1280, height: 720 },
+            { caption: 'Monday', width: 1080, height: 1080 },
+          ]),
+        },
+        createdAt: new Date(Date.now() - 45_000),
+      },
+    });
+    // ...and one from Bob, which is what a single photo message looks like.
     const picture = await prisma.message.create({
       data: {
         conversationId: direct.id,
         senderId: bob.id,
         content: 'Look what I found',
-        imageKey: await seedFile(
-          'message',
-          bob.id,
-          await placeholderPostImage('for Alice', `${bob.id}-message`),
-        ),
+        images: {
+          create: await seedMessageImages(bob.id, [
+            { caption: 'for Alice', width: 1280, height: 720 },
+          ]),
+        },
         createdAt: new Date(Date.now() - 30_000),
       },
       select: { createdAt: true },

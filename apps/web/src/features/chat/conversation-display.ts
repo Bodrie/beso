@@ -133,11 +133,19 @@ export function messagePreview(message: Message, conversation: Conversation, meI
   return message.content || attachmentWord(message);
 }
 
-/** The thing a message without text carries, for list rows, alerts and announcements. */
+/** The thing a message without text carries, for list rows and quotes: "Picture", "3 pictures". */
 export function attachmentWord(message: Message): string {
-  if (message.image) return 'Picture';
+  const pictures = message.images.length;
+  if (pictures > 1) return `${pictures} pictures`;
+  if (pictures === 1) return 'Picture';
   if (message.voice) return 'Voice message';
   return message.sharedPost ? 'Post' : 'Message';
+}
+
+/** ...and as what somebody sent, for alerts and announcements: "a picture", "3 pictures". */
+export function attachmentPhrase(message: Message): string {
+  const word = attachmentWord(message).toLowerCase();
+  return message.images.length > 1 ? word : `a ${word}`;
 }
 
 /** Counts per type, the total and my own, from the plain list a message carries. */
@@ -187,13 +195,14 @@ export function quoteOf(message: Message): QuotedMessage {
     senderId: message.senderId,
     excerpt:
       flat.length > REPLY_EXCERPT_LENGTH ? `${flat.slice(0, REPLY_EXCERPT_LENGTH - 1)}…` : flat,
-    attachment: message.image
-      ? 'picture'
-      : message.voice
-        ? 'voice'
-        : message.sharedPost
-          ? 'post'
-          : null,
+    attachment:
+      message.images.length > 0
+        ? 'picture'
+        : message.voice
+          ? 'voice'
+          : message.sharedPost
+            ? 'post'
+            : null,
     deleted: message.deletedAt !== null,
   };
 }

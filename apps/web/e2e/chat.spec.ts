@@ -109,7 +109,7 @@ test.describe('chat', () => {
     await expect(aliceLog).toBeVisible();
 
     await page
-      .getByLabel('Attach a picture')
+      .getByLabel('Attach pictures')
       .setInputFiles(path.join(import.meta.dirname, 'fixtures', 'photo.png'));
     await expect(page.getByRole('img', { name: 'Attachment preview' })).toBeVisible();
     const caption = `Look ${Date.now()}`;
@@ -129,6 +129,54 @@ test.describe('chat', () => {
     await picture.click();
     const viewer = bob.getByRole('dialog', { name: 'Pictures in this conversation' });
     await expect(viewer.getByRole('img', { name: 'Sent by Alice Anderson' })).toBeVisible();
+    await bob.keyboard.press('Escape');
+    await expect(viewer).toBeHidden();
+    await bob.context().close();
+  });
+
+  test('several pictures chosen at once travel as one message, shown as a pile', async ({
+    page,
+    browser,
+  }) => {
+    const bob = await (await contextAs(browser, 'bob')).newPage();
+    await openHome(bob);
+    await bob.goto('/messages/with/alice');
+    await openHome(page);
+    await page.goto('/messages/with/bob');
+    const aliceLog = page.getByRole('log', { name: 'Conversation with Bob Brown' });
+    await expect(aliceLog).toBeVisible();
+
+    // The file dialog takes several at once.
+    const photo = path.join(import.meta.dirname, 'fixtures', 'photo.png');
+    await page.getByLabel('Attach pictures').setInputFiles([photo, photo, photo]);
+    const strip = page.getByRole('list', { name: '3 pictures to send' });
+    await expect(strip.getByRole('img')).toHaveCount(3);
+    const caption = `Three ${Date.now()}`;
+    await page.getByRole('textbox', { name: 'Message Bob Brown' }).fill(caption);
+    // Send waits for every upload to finish.
+    await page.getByRole('button', { name: 'Send' }).click();
+    const sent = aliceLog.getByRole('listitem').filter({ hasText: caption });
+    await expect(sent.getByRole('button', { name: 'Open 3 pictures sent by you' })).toBeVisible();
+    await expect(strip).toHaveCount(0);
+
+    // Bob gets one message with the three: a pile with their number on it.
+    const bobLog = bob.getByRole('log', { name: 'Conversation with Alice Anderson' });
+    const received = bobLog.getByRole('listitem').filter({ hasText: caption });
+    const pile = received.getByRole('button', {
+      name: 'Open 3 pictures sent by Alice Anderson',
+    });
+    await expect(pile).toBeVisible();
+    await expect(pile).toHaveText('3');
+    // A press opens the viewer on the first; the arrows page through the other two.
+    await pile.click();
+    const viewer = bob.getByRole('dialog', { name: 'Pictures in this conversation' });
+    const shown = viewer.getByRole('img', { name: /^Sent by Alice Anderson, \d+ of \d+$/ });
+    await expect(shown).toBeVisible();
+    const first = await shown.getAttribute('src');
+    await bob.keyboard.press('ArrowRight');
+    await expect(shown).not.toHaveAttribute('src', first ?? '');
+    await bob.keyboard.press('ArrowRight');
+    await expect(shown).toBeVisible();
     await bob.keyboard.press('Escape');
     await expect(viewer).toBeHidden();
     await bob.context().close();

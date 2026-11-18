@@ -8,7 +8,8 @@ Real but deferred work, grouped by area. Each line says where it came from and w
 
 ## Contract / docs
 - **Email follow-ups** – an admin view of unverified accounts; a revert link in the "address changed" notice (today the old address is only told). (Changing the address and the sessions list shipped as D1 on 2026-10-20, ADR 0010 amendment; accounts never verified are removed after 30 days since C6.)
-- **Pre-D2 picture fields** – posts, quote embeds and messages still answer `imageUrl` next to `images`/`image`, and `POST /posts` still takes a single `imageKey`, so tabs opened before the D2 deploy keep working. Drop both (shared schemas, `toPost`, `toMessage`, `PostsService.create`, one int test) with the next change to the post shape, or a release after D2.
+- **Pre-D2 picture fields** – posts and quote embeds still answer `imageUrl` next to `images`, and `POST /posts` still takes a single `imageKey`, so tabs opened before the D2 deploy keep working. Drop both (shared schemas, `toPost`, `PostsService.create`, one int test) with the next change to the post shape, or a release after D2.
+- **Single-picture message fields** – since R14 (2026-11-18) a message answers `images`; `image` and `imageUrl` (its first picture) and the send input's single `imageKey` stay for tabs opened before that deploy. Drop them a release later (shared `messageSchema`/`sendMessageSchema` with `messageImageKeysOf`, `toMessage`, `ConversationsService.send`, the fixtures and one int test).
 - **`message:new` for an unknown conversation** – a push for a conversation the client has never listed triggers a refetch of the list (`upsertConversation`); push the conversation itself if that round trip shows up.
 
 ## Operations
@@ -41,7 +42,7 @@ Nothing tells anyone today when something breaks. Docker health checks only mark
 ## Ideas not in the agreed order (2026-10-22)
 - **Weekly digest** (F4 in `IMPLEMENTATION_PLAN.md`, owner 2026-10-23: not for now) – the Monday mail for members away three days, as planned there. Open points when picked up: the Resend plan's daily cap (every digest falls on Monday morning), the fallback for members without a time zone, the privacy-notice line. The frequent jobs it runs on exist since F3.
 From the ideas round that produced Track F of `IMPLEMENTATION_PLAN.md` (the newcomer experience that stood here is F1 and F2's Getting started checklist now). Trigger for each: members asking, or a gap between slices.
-- **Chat**: forward, pin a message, search inside a thread; a picture on the "New group" form (admins set one from the members dialog since R11, 2026-10-31, so the creation form stays name and members). (Replies to a message shipped as R6 on 2026-10-23.)
+- **Chat**: forward, pin a message, search inside a thread; pictures pasted or dropped into the composer (several go through the file dialog since R14, 2026-11-18) and saving a pile through the phone's share sheet (`navigator.share({ files })`) instead of one download after another; a picture on the "New group" form (admins set one from the members dialog since R11, 2026-10-31, so the creation form stays name and members). (Replies to a message shipped as R6 on 2026-10-23.)
 - **Posts and profiles**: content warnings and spoilers, drafts and scheduled posts. (The pinned post and double tap to like shipped as R6 on 2026-10-23.)
 - **Communities**: groups with their own feed, members and moderators, once one shared feed gets crowded (XL).
 - **Games beyond F6**: ratings and leaderboards; checkers, backgammon, a daily word puzzle, battleship (listed in F6 as the later games).

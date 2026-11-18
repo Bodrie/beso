@@ -1,8 +1,10 @@
 import {
+  MESSAGE_MAX_IMAGES,
   createGroupSchema,
   markReadAckSchema,
   markReadPayloadSchema,
   messageAckSchema,
+  messageImageKeysOf,
   replyRefSchema,
   sendMessagePayloadSchema,
   sendMessageSchema,
@@ -24,6 +26,25 @@ describe('sendMessageSchema', () => {
       imageKey: `message/${ID}.webp`,
     });
     expect(sendMessageSchema.safeParse({ imageKey: `post/${ID}.webp` }).success).toBe(false);
+  });
+
+  it('takes several pictures in order, each once, up to the limit', () => {
+    const key = (n: number) => `message/${ID.slice(0, -2)}${String(n).padStart(2, '0')}.webp`;
+    const ten = Array.from({ length: MESSAGE_MAX_IMAGES }, (_, index) => key(index));
+    expect(sendMessageSchema.parse({ imageKeys: ten })).toEqual({ content: '', imageKeys: ten });
+    expect(sendMessageSchema.safeParse({ imageKeys: [...ten, key(10)] }).success).toBe(false);
+    expect(sendMessageSchema.safeParse({ imageKeys: [key(1), key(1)] }).success).toBe(false);
+    expect(sendMessageSchema.safeParse({ imageKeys: [`post/${ID}.webp`] }).success).toBe(false);
+    // No picture after all is no message, unless there is text.
+    expect(sendMessageSchema.safeParse({ imageKeys: [] }).success).toBe(false);
+    expect(sendMessageSchema.safeParse({ imageKeys: [], content: 'hi' }).success).toBe(true);
+    // The list wins over the single key of an older tab.
+    expect(messageImageKeysOf({ imageKeys: [key(1), key(2)], imageKey: key(3) })).toEqual([
+      key(1),
+      key(2),
+    ]);
+    expect(messageImageKeysOf({ imageKey: key(3) })).toEqual([key(3)]);
+    expect(messageImageKeysOf({})).toEqual([]);
   });
 
   it('accepts a post to send, with or without text', () => {
@@ -130,6 +151,9 @@ describe('voice messages', () => {
     expect(sendMessageSchema.safeParse({ voiceKey, imageKey: `message/${ID}.webp` }).success).toBe(
       false,
     );
+    expect(
+      sendMessageSchema.safeParse({ voiceKey, imageKeys: [`message/${ID}.webp`] }).success,
+    ).toBe(false);
     expect(sendMessageSchema.safeParse({ voiceKey, postId: ID }).success).toBe(false);
     expect(sendMessageSchema.safeParse({ voiceKey: `message/${ID}.webp` }).success).toBe(false);
     expect(sendMessageSchema.safeParse({ voiceKey: `voice/${ID}.webp` }).success).toBe(false);

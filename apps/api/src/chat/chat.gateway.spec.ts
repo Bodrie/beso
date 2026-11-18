@@ -133,6 +133,7 @@ describe('ChatGateway', () => {
       senderId: alice.id,
       kind: 'user' as const,
       content: 'fixed',
+      images: [],
       image: null,
       voice: null,
       imageUrl: null,

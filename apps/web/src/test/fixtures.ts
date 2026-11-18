@@ -262,6 +262,7 @@ export function makeMessage(
     senderId,
     kind: 'user',
     content,
+    images: [],
     image: null,
     voice: null,
     imageUrl: null,

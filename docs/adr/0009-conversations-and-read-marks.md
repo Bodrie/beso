@@ -192,6 +192,40 @@ reader's other tabs lower their badge (review L9).
   way a picture does. Phones need the audio context created inside the tap, so the recorder
   creates it before anything awaits.
 
+## Amendment 2026-11-18: several pictures in a message (owner's request, R14)
+
+- **A message carries up to ten pictures.** `message_images` (migration `message_images`:
+  `message_id`, `position`, `key`; the chat's twin of `post_images`) replaces
+  `messages.image_key`, and the one picture of every older message became its first row.
+  `sendMessageSchema.imageKeys` takes the sender's own uploads of kind `message`, each once, at
+  most `MESSAGE_MAX_IMAGES` (10), in the order they are shown; pictures still never go with a
+  voice message. The message answers `images: StoredImage[]`. Ten rather than a post's four: a
+  chat is where an evening's photos go, and the upload route allows twenty a minute.
+- **Tabs opened before the deploy** keep working for a release, the way D2 did it for posts:
+  the single `imageKey` is still accepted (`messageImageKeysOf` folds the two fields, the list
+  wins) and `image` / `imageUrl` still answer the first picture, so such a tab shows one of
+  several. New code reads and sends neither (`BACKLOG.md` has the removal).
+- **Files follow the rows.** Both foreign keys cascade: the pictures are the sender's own
+  uploads, so the rows leave with the account whichever cascade runs first. Deleting the
+  message deletes its rows and discards every file; `UploadsService.discard` and the orphan job
+  count `message_images` among the references; the export lists `imageUrls` per message. A
+  reply's quote still says `picture` whatever the number; the list snippet, the announcement,
+  the tab's alert and the push count them ("3 pictures", "Sent 3 pictures").
+- **Composer.** The file dialog takes several files at once, and more can be added until the
+  limit. One picture previews as before; several show as a strip of thumbnails in the order
+  they go out, each with its own progress, retry and remove. The message waits for every upload
+  (one that failed holds it back until it is retried or removed) and the optimistic bubble
+  shows the local previews (`useImageUploads(...).handOver()`), which the thread revokes once
+  the message is confirmed.
+- **Thread.** One picture keeps its own proportions. Several lie as a **pile**
+  (`MessagePictures`): the first on top, the next two leaning out behind it, their number on a
+  tag; a press opens the viewer on the first, and the viewer pages through the pile and on
+  through the other pictures of the loaded thread (it keeps the message's id and the place in
+  it). "Download pictures", beside the bubble and under a press-and-hold, saves the whole pile
+  one file after another. A grid like a post's was the alternative; the pile keeps the bubble
+  the size of one picture however many it carries and says "there is more" at a glance, which
+  suits the narrow chat windows.
+
 ## Consequences
 
 - The web client addresses threads by conversation id (`/messages/:conversationId`); `/messages/with/:username` resolves a person to their direct thread and redirects. Member lists, per-member read receipts and multi-person typing all derive from the conversation's `members`; a group's avatar is its own picture when an admin set one (amendment 2026-10-31), a tile otherwise.

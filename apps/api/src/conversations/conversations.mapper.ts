@@ -15,8 +15,8 @@ export const messageSelect = {
   senderId: true,
   kind: true,
   content: true,
-  imageKey: true,
-  image: { select: storedImageSelect },
+  // In the sender's order, each with its size (the chat's `post_images`).
+  images: { select: { upload: { select: storedImageSelect } }, orderBy: { position: 'asc' } },
   voiceKey: true,
   voice: { select: { key: true, durationMs: true } },
   voicePeaks: true,
@@ -29,10 +29,10 @@ export const messageSelect = {
       id: true,
       senderId: true,
       content: true,
-      imageKey: true,
       voiceKey: true,
       sharesPost: true,
       deletedAt: true,
+      _count: { select: { images: true } },
     },
   },
   editedAt: true,
@@ -56,13 +56,14 @@ function replyOf(row: MessageRow): Message['replyTo'] {
     id: original.id,
     senderId: original.senderId,
     excerpt: quoted(original.content),
-    attachment: original.imageKey
-      ? 'picture'
-      : original.voiceKey
-        ? 'voice'
-        : original.sharesPost
-          ? 'post'
-          : null,
+    attachment:
+      original._count.images > 0
+        ? 'picture'
+        : original.voiceKey
+          ? 'voice'
+          : original.sharesPost
+            ? 'post'
+            : null,
     deleted: original.deletedAt !== null,
   };
 }
@@ -74,14 +75,22 @@ function systemLineOf(row: MessageRow): SystemLine | null {
   return parsed.success ? parsed.data : null;
 }
 
+/** The storage keys of a message's pictures, in order: what a deletion discards. */
+export const imageKeysOf = (row: MessageRow): string[] =>
+  row.images.map((image) => image.upload.key);
+
 export function toMessage(row: MessageRow, assetsBase: string): Message {
+  const images = row.images.map((image) => toStoredImage(image.upload, assetsBase));
   return {
     id: row.id,
     conversationId: row.conversationId,
     senderId: row.senderId,
     kind: row.kind,
     content: row.content,
-    image: row.image ? toStoredImage(row.image, assetsBase) : null,
+    images,
+    // The first picture twice more, for tabs opened before a message took several.
+    image: images[0] ?? null,
+    imageUrl: images[0]?.url ?? null,
     voice: row.voice
       ? {
           url: `${assetsBase}/${row.voice.key}`,
@@ -89,7 +98,6 @@ export function toMessage(row: MessageRow, assetsBase: string): Message {
           peaks: row.voicePeaks,
         }
       : null,
-    imageUrl: row.image ? `${assetsBase}/${row.image.key}` : null,
     sharedPost: row.sharedPostId
       ? { id: row.sharedPostId }
       : row.sharesPost

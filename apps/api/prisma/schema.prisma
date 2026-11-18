@@ -544,7 +544,7 @@ model Upload {
 
   owner         User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   postImages    PostImage[]
-  messages      Message[]      @relation("MessageImage")
+  messageImages MessageImage[]
   voiceMessages Message[]      @relation("MessageVoice")
   conversations Conversation[]
 
@@ -775,16 +775,15 @@ model Message {
   senderId       String      @map("sender_id") @db.Uuid
   /// `system` lines are written by the server about membership changes and renames.
   kind           MessageKind @default(user)
-  /// Empty when the message is a picture, a post or a voice message only, a system line or deleted.
+  /// Empty when the message is pictures, a post or a voice message only, a system line or deleted.
   content        String
-  imageKey       String?     @map("image_key")
   /// A voice message (an upload of kind `voice`), alone in the message; null once deleted.
   voiceKey       String?     @map("voice_key")
   /// The waveform the recorder measured, 0..1 per slice; empty on every other message.
   voicePeaks     Float[]     @default([]) @map("voice_peaks")
   /// Null until the sender edited the text; previous texts live in message_revisions.
   editedAt       DateTime?   @map("edited_at") @db.Timestamptz(3)
-  /// Soft delete by the sender: the row stays for ordering and read marks, content and picture go.
+  /// Soft delete by the sender: the row stays for ordering and read marks, content and pictures go.
   deletedAt      DateTime?   @map("deleted_at") @db.Timestamptz(3)
   /// The subject of a system line (shared `systemLineSchema`).
   systemMeta     Json?       @map("system_meta") @db.JsonB
@@ -802,7 +801,7 @@ model Message {
   sender       User              @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
   revisions    MessageRevision[]
   reactions    MessageReaction[]
-  image        Upload?           @relation("MessageImage", fields: [imageKey], references: [key], onDelete: SetNull)
+  images       MessageImage[]
   voice        Upload?           @relation("MessageVoice", fields: [voiceKey], references: [key], onDelete: SetNull)
   sharedPost   Post?             @relation("MessageSharedPost", fields: [sharedPostId], references: [id], onDelete: SetNull)
   replyTo      Message?          @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
@@ -810,11 +809,26 @@ model Message {
 
   @@index([conversationId, createdAt, id])
   @@index([senderId])
-  @@index([imageKey])
   @@index([voiceKey])
   @@index([sharedPostId])
   @@index([replyToId])
   @@map("messages")
+}
+
+/// A message's pictures in the order the sender attached them (ADR 0009 amendment "several
+/// pictures"), the chat's twin of `post_images`: uploads of kind `message` made by the sender,
+/// so the rows leave with the upload as well as with the message.
+model MessageImage {
+  messageId String @map("message_id") @db.Uuid
+  position  Int    @db.SmallInt
+  key       String
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  upload  Upload  @relation(fields: [key], references: [key], onDelete: Cascade)
+
+  @@id([messageId, position])
+  @@index([key])
+  @@map("message_images")
 }
 
 model MessageRevision {

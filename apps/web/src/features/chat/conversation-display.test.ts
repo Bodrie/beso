@@ -1,12 +1,15 @@
 import type { Conversation, SystemLine } from '@beso/shared';
 import { alice, bob, carol, makeMessage, summaryOf } from '@/test/fixtures';
 import {
+  attachmentPhrase,
   conversationName,
   directPeer,
   isAdmin,
   messagePreview,
+  quoteOf,
   reactionSummaryOf,
   readBy,
+  replyQuoteText,
   seenText,
   systemLineText,
   typingText,
@@ -159,20 +162,27 @@ describe('systemLineText / messagePreview', () => {
     expect(post('', { unavailable: true })).toBe('Post');
   });
 
-  it('previews a deleted message, a system line and a picture', () => {
+  it('previews a deleted message, a system line, a picture and several', () => {
     expect(messagePreview(makeMessage(group.id, bob.id, 'hi'), group, alice.id)).toBe('hi');
     expect(
       messagePreview(makeMessage(group.id, bob.id, '', { deletedAt: T2 }), group, alice.id),
     ).toBe('Message deleted');
+    const picture = { url: 'http://localhost/pic.webp', width: 64, height: 64 };
+    const one = makeMessage(group.id, bob.id, '', { images: [picture] });
+    const three = makeMessage(group.id, bob.id, '', { images: [picture, picture, picture] });
+    expect(messagePreview(one, group, alice.id)).toBe('Picture');
+    expect(messagePreview(three, group, alice.id)).toBe('3 pictures');
+    // Text wins over what it comes with.
+    expect(messagePreview({ ...three, content: 'look' }, group, alice.id)).toBe('look');
+    // As what somebody sent ("Bob: sent …"), and as the quote above an answer.
+    expect(attachmentPhrase(one)).toBe('a picture');
+    expect(attachmentPhrase(three)).toBe('3 pictures');
     expect(
-      messagePreview(
-        makeMessage(group.id, bob.id, '', {
-          image: { url: 'http://localhost/pic.webp', width: 64, height: 64 },
-        }),
-        group,
-        alice.id,
-      ),
-    ).toBe('Picture');
+      attachmentPhrase(makeMessage(group.id, bob.id, '', { sharedPost: { id: POST_ID } })),
+    ).toBe('a post');
+    expect(quoteOf(three)).toMatchObject({ excerpt: '', attachment: 'picture' });
+    expect(replyQuoteText(quoteOf(three), three)).toBe('3 pictures');
+    expect(replyQuoteText(quoteOf(three), undefined)).toBe('Picture');
     expect(
       messagePreview(
         makeMessage(group.id, alice.id, '', { kind: 'system', system: line('renamed', [], 'X') }),

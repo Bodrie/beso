@@ -1,6 +1,6 @@
 {
   "name": "beso",
-  "version": "2.0.0-dev",
+  "version": "2.0.1",
   "private": true,
   "description": "BeSo \u2013 a small social network (monorepo)",
   "packageManager": "pnpm@11.1.0",

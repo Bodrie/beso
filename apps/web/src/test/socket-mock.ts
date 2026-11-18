@@ -3,6 +3,7 @@ import {
   conversationReadPayloadSchema,
   conversationRefSchema,
   markReadPayloadSchema,
+  messageImageKeysOf,
   messageSchema,
   notificationSchema,
   presenceUpdateSchema,
@@ -164,14 +165,13 @@ function defaultAckHandlers(socket: FakeSocket): Record<string, AckHandler> {
       const user = mockDb.user;
       const parsed = sendMessagePayloadSchema.safeParse(payload);
       if (!user || !parsed.success) return validationFailed;
-      const { conversationId, content, imageKey, postId, replyToId, voiceKey, voicePeaks } =
-        parsed.data;
+      const { conversationId, content, postId, replyToId, voiceKey, voicePeaks } = parsed.data;
       if (!memberRow(user.id, conversationId)) return notFound;
       const message = storeMessage(
         conversationId,
         user.id,
         content,
-        imageKey,
+        messageImageKeysOf(parsed.data),
         postId,
         replyToId,
         voiceKey ? { key: voiceKey, peaks: voicePeaks ?? [] } : undefined,

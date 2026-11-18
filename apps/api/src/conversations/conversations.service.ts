@@ -17,6 +17,7 @@ import {
   type SendMessageData,
   type SetGroupPictureInput,
   type SystemLine,
+  messageImageKeysOf,
 } from '@beso/shared';
 import { AssetsService } from '../assets/assets.service.js';
 import { badRequest, forbidden, notFound } from '../common/errors.js';
@@ -48,6 +49,7 @@ import {
   type MessageRow,
   conversationSelect,
   directKeyOf,
+  imageKeysOf,
   isAdminOf,
   memberIdsOf,
   messageSelect,
@@ -219,13 +221,12 @@ export class ConversationsService {
 
   async send(meId: string, id: string, input: SendMessageData): Promise<Message> {
     const row = await this.rowForMember(meId, id);
-    if (input.imageKey !== undefined) {
-      await this.uploads.assertOwned(input.imageKey, {
-        ownerId: meId,
-        kind: 'message',
-        field: 'imageKey',
-      });
-    }
+    const imageKeys = messageImageKeysOf(input);
+    await this.uploads.assertAllOwned(imageKeys, {
+      ownerId: meId,
+      kind: 'message',
+      field: input.imageKeys ? 'imageKeys' : 'imageKey',
+    });
     if (input.voiceKey !== undefined) {
       await this.uploads.assertOwned(input.voiceKey, {
         ownerId: meId,
@@ -241,7 +242,7 @@ export class ConversationsService {
           conversationId: id,
           senderId: meId,
           content: input.content,
-          imageKey: input.imageKey ?? null,
+          images: { create: imageKeys.map((key, position) => ({ key, position })) },
           voiceKey: input.voiceKey ?? null,
           voicePeaks: input.voiceKey === undefined ? [] : (input.voicePeaks ?? []),
           sharedPostId: input.postId ?? null,
@@ -298,7 +299,7 @@ export class ConversationsService {
 
   /**
    * The sender takes a message back, however old: the row stays (ordering, read marks), its
-   * text, picture, voice and post go, and everyone sees "Message deleted". Idempotent.
+   * text, pictures, voice and post go, and everyone sees "Message deleted". Idempotent.
    */
   async deleteMessage(meId: string, id: string, messageId: string): Promise<Message> {
     const row = await this.rowForMember(meId, id);
@@ -315,7 +316,7 @@ export class ConversationsService {
       data: {
         deletedAt: new Date(),
         content: '',
-        imageKey: null,
+        images: { deleteMany: {} },
         voiceKey: null,
         voicePeaks: [],
         sharedPostId: null,
@@ -325,8 +326,9 @@ export class ConversationsService {
       },
       select: messageSelect,
     });
-    await this.uploads.discard(existing.imageKey);
-    await this.uploads.discard(existing.voiceKey);
+    await Promise.all(
+      [...imageKeysOf(existing), existing.voiceKey].map((key) => this.uploads.discard(key)),
+    );
     const message = this.toMessage(updated);
     await this.events.emitAsync(
       MessageDeletedEvent.EVENT,
@@ -336,7 +338,7 @@ export class ConversationsService {
   }
 
   /**
-   * The sender changes the text of a message (the picture stays): the previous text is kept as
+   * The sender changes the text of a message (the pictures stay): the previous text is kept as
    * a revision, `editedAt` is stamped and everyone gets the new copy. An unchanged text is a
    * no-op. Deleted messages and system lines cannot be edited.
    */

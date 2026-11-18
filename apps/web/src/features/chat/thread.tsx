@@ -52,7 +52,7 @@ import { useCurrentUser } from '@/features/auth/current-user';
 import { type PressAction, ReactionBar, ReactionPicker } from '@/features/comments/reaction-bar';
 import { isApiClientError } from '@/lib/api/client';
 import { fetchMessageRevisions } from '@/lib/api/conversations';
-import { savePicture } from '@/lib/download';
+import { savePictures } from '@/lib/download';
 import { formatDateTime, formatDayLabel, formatTime } from '@/lib/format';
 import { flattenPages } from '@/lib/infinite';
 import { firstName } from '@/lib/names';
@@ -61,7 +61,7 @@ import { useChat } from './chat-context';
 import { SharedPostCard } from './shared-post-card';
 import { ConversationAvatar } from './conversation-avatar';
 import {
-  attachmentWord,
+  attachmentPhrase,
   conversationName,
   directPeer,
   isAdmin,
@@ -85,6 +85,7 @@ import {
   upsertConversation,
 } from './message-cache';
 import { MessageComposer, type OutgoingMessage } from './message-composer';
+import { MessagePictures } from './message-pictures';
 import { PresenceDot } from './presence-dot';
 import { TypingIndicator } from './typing-indicator';
 import { useDeleteMessage, useMessages } from './use-conversations';
@@ -169,9 +170,7 @@ export function Thread({ conversation, embedded = false, className }: ThreadProp
       if (fresh.system) setAnnouncement(systemLineText(fresh.system, conversation, me.id));
     } else {
       const sender = firstName(memberById(conversation, fresh.senderId)?.user.name ?? 'Someone');
-      setAnnouncement(
-        `${sender}: ${fresh.content || `sent a ${attachmentWord(fresh).toLowerCase()}`}`,
-      );
+      setAnnouncement(`${sender}: ${fresh.content || `sent ${attachmentPhrase(fresh)}`}`);
     }
     // Scrolled up through the history: the new messages wait below, behind a pill.
     const unseen = arrived.filter((message) => message.kind === 'user').length;
@@ -252,21 +251,22 @@ export function Thread({ conversation, embedded = false, className }: ThreadProp
 
   const send = async (outgoing: OutgoingMessage, retryOf?: string) => {
     if (retryOf) removeFromThread(queryClient, conversation.id, retryOf);
+    const pictures = outgoing.images ?? [];
     const temp: ThreadMessage = {
       id: `pending-${crypto.randomUUID()}`,
       conversationId: conversation.id,
       senderId: me.id,
       kind: 'user',
       content: outgoing.content,
-      image: outgoing.previewUrl
-        ? {
-            url: outgoing.previewUrl,
-            width: outgoing.previewSize?.width ?? null,
-            height: outgoing.previewSize?.height ?? null,
-          }
-        : null,
-      imageUrl: outgoing.previewUrl ?? null,
-      imageKey: outgoing.imageKey,
+      // The local previews, at the uploads' sizes, until the server's copy takes their place.
+      images: pictures.map((picture) => ({
+        url: picture.previewUrl,
+        width: picture.width,
+        height: picture.height,
+      })),
+      imageKeys: pictures.map((picture) => picture.key),
+      image: null,
+      imageUrl: null,
       voice: outgoing.voice ?? null,
       voiceKey: outgoing.voiceKey,
       sharedPost: null,
@@ -283,15 +283,15 @@ export function Thread({ conversation, embedded = false, className }: ThreadProp
     try {
       const message = await chat.sendMessage(conversation.id, {
         content: outgoing.content,
-        imageKey: outgoing.imageKey,
+        imageKeys: pictures.length > 0 ? pictures.map((picture) => picture.key) : undefined,
         voiceKey: outgoing.voiceKey,
         voicePeaks: outgoing.voice?.peaks,
         replyToId: outgoing.replyTo?.id,
       });
       replaceInThread(queryClient, conversation.id, temp.id, message);
       upsertConversation(queryClient, message, { countUnread: false });
-      // The bubble shows the server's copy now. A failed one keeps the preview for "Retry".
-      if (outgoing.previewUrl) URL.revokeObjectURL(outgoing.previewUrl);
+      // The bubble shows the server's copy now. A failed one keeps the previews for "Retry".
+      for (const picture of pictures) URL.revokeObjectURL(picture.previewUrl);
       if (outgoing.voice) URL.revokeObjectURL(outgoing.voice.url);
     } catch (error) {
       markFailedInThread(queryClient, conversation.id, temp.id);
@@ -423,9 +423,10 @@ export function Thread({ conversation, embedded = false, className }: ThreadProp
                       void send(
                         {
                           content: message.content,
-                          imageKey: message.imageKey,
-                          previewUrl: message.image?.url,
-                          previewSize: message.image ?? undefined,
+                          images: message.images.flatMap((image, index) => {
+                            const key = message.imageKeys?.[index];
+                            return key ? [{ key, previewUrl: image.url, ...sizeOf(image) }] : [];
+                          }),
                           voiceKey: message.voiceKey,
                           voice: message.voice ?? undefined,
                           replyTo:
@@ -502,6 +503,8 @@ type MessageListProps = {
 
 const isSystem = (message: ThreadMessage | undefined): boolean => message?.kind === 'system';
 
+const sizeOf = (image: StoredImage) => ({ width: image.width, height: image.height });
+
 /** Up to this many emoji, a message of emoji only goes without its bubble. */
 const BARE_EMOJI_MAX = 3;
 
@@ -529,18 +532,21 @@ function MessageList({ messages, meId, conversation, onRetry, onReply }: Message
   const [editing, setEditing] = useState<string | null>(null);
   // A press-and-hold on a bubble opens the reaction picker over it, as native apps do.
   const [pressed, setPressed] = useState<{ id: string; element: HTMLElement } | null>(null);
-  // The viewer pages through every picture of the loaded thread, oldest first; it follows the
-  // message on screen, so history loading in above does not swap the picture.
-  const [viewing, setViewing] = useState<string | null>(null);
+  // The viewer pages through every picture of the loaded thread, oldest first, a message's
+  // pictures in their order; it follows the message on screen (and the place in it), so history
+  // loading in above does not swap the picture.
+  const [viewing, setViewing] = useState<{ id: string; index: number } | null>(null);
   const pictures = useMemo(
     () =>
       messages.flatMap((m) =>
-        m.image ? [{ id: m.id, senderId: m.senderId, image: m.image }] : [],
+        m.images.map((image, index) => ({ id: m.id, index, senderId: m.senderId, image })),
       ),
     [messages],
   );
   const pictureImages = useMemo<StoredImage[]>(() => pictures.map((p) => p.image), [pictures]);
-  const viewingIndex = pictures.findIndex((p) => p.id === viewing);
+  const viewingIndex = viewing
+    ? pictures.findIndex((p) => p.id === viewing.id && p.index === viewing.index)
+    : -1;
   const lastMine = messages.findLast(
     (m) => m.senderId === meId && !m.status && m.kind === 'user' && m.deletedAt === null,
   );
@@ -610,9 +616,11 @@ function MessageList({ messages, meId, conversation, onRetry, onReply }: Message
         const isEditing = editing === message.id;
         const reactions = settled ? reactionSummaryOf(message.reactions, meId) : null;
         const onReact = (type: ReactionType | null) => react.mutate({ message, type });
-        const picture = settled ? message.image : null;
-        // Text under a picture or a post is a caption, inset like the attachment above it.
-        const captioned = message.image !== null || message.sharedPost !== null;
+        // What "Download" saves: the one picture, or every picture of the pile.
+        const saved = settled ? message.images.map((image) => image.url) : [];
+        const saveLabel = saved.length > 1 ? 'Download pictures' : 'Download picture';
+        // Text under pictures or a post is a caption, inset like the attachment above it.
+        const captioned = message.images.length > 0 || message.sharedPost !== null;
         // A few emoji and nothing else stand on their own, large and without the bubble, as in
         // other chat apps; a reply (its quote needs the frame) or a failed send keeps it.
         const emoji =
@@ -631,12 +639,12 @@ function MessageList({ messages, meId, conversation, onRetry, onReply }: Message
           ...(settled
             ? [{ label: 'Reply', icon: <ReplyIcon />, onSelect: () => onReply(message) }]
             : []),
-          ...(picture
+          ...(saved.length > 0
             ? [
                 {
-                  label: 'Download picture',
+                  label: saveLabel,
                   icon: <DownloadIcon />,
-                  onSelect: () => void savePicture(picture.url),
+                  onSelect: () => void savePictures(saved),
                 },
               ]
             : []),
@@ -693,11 +701,7 @@ function MessageList({ messages, meId, conversation, onRetry, onReply }: Message
                     ? cn('px-0.5', emoji === 1 ? 'text-5xl/tight' : 'text-4xl/tight')
                     : cn(
                         'text-[15px]/5',
-                        message.image || message.sharedPost
-                          ? 'p-1'
-                          : message.voice
-                            ? 'px-2 py-1.5'
-                            : 'px-3.5 py-2',
+                        captioned ? 'p-1' : message.voice ? 'px-2 py-1.5' : 'px-3.5 py-2',
                         deleted
                           ? 'text-muted-foreground border border-dashed bg-transparent italic'
                           : mine
@@ -721,27 +725,12 @@ function MessageList({ messages, meId, conversation, onRetry, onReply }: Message
                     onJump={jumpTo}
                   />
                 ) : null}
-                {message.image ? (
-                  <button
-                    type="button"
-                    aria-label={`Open picture sent by ${sentBy}`}
-                    aria-haspopup="dialog"
-                    // A tap opens it; a hold is the message's (reactions, download).
-                    data-long-press=""
-                    className="block cursor-zoom-in overflow-hidden rounded-xl focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
-                    onClick={() => setViewing(message.id)}
-                  >
-                    <img
-                      src={message.image.url}
-                      // The size reserves the bubble's shape before the file arrives (D2).
-                      width={message.image.width ?? undefined}
-                      height={message.image.height ?? undefined}
-                      alt=""
-                      loading="lazy"
-                      decoding="async"
-                      className="max-h-72 w-auto max-w-full object-cover"
-                    />
-                  </button>
+                {message.images.length > 0 ? (
+                  <MessagePictures
+                    images={message.images}
+                    sentBy={sentBy}
+                    onOpen={(place) => setViewing({ id: message.id, index: place })}
+                  />
                 ) : null}
                 {message.sharedPost ? <SharedPostCard post={message.sharedPost} /> : null}
                 {message.voice && !deleted ? (
@@ -796,13 +785,13 @@ function MessageList({ messages, meId, conversation, onRetry, onReply }: Message
                     onClose={() => setPressed(null)}
                     actions={pressActions}
                   />
-                  {picture ? (
+                  {saved.length > 0 ? (
                     <Button
                       variant="ghost"
                       size="icon-xs"
-                      aria-label="Download picture"
+                      aria-label={saveLabel}
                       className="text-muted-foreground hover:text-foreground rounded-full"
-                      onClick={() => void savePicture(picture.url)}
+                      onClick={() => void savePictures(saved)}
                     >
                       <DownloadIcon />
                     </Button>
@@ -892,7 +881,10 @@ function MessageList({ messages, meId, conversation, onRetry, onReply }: Message
       <Lightbox
         images={pictureImages}
         index={viewingIndex === -1 ? null : viewingIndex}
-        onIndexChange={(next) => setViewing(next === null ? null : (pictures[next]?.id ?? null))}
+        onIndexChange={(next) => {
+          const shown = next === null ? undefined : pictures[next];
+          setViewing(shown ? { id: shown.id, index: shown.index } : null);
+        }}
         title="Pictures in this conversation"
         alt={(index) => `Sent by ${sentByOf(pictures[index]?.senderId ?? '')}`}
       />

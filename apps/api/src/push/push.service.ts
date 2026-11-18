@@ -145,8 +145,10 @@ export class PushService {
         : sender.name;
     const words = message.content.trim()
       ? pushExcerpt(message.content)
-      : message.image
-        ? 'Sent a picture'
+      : message.images.length > 0
+        ? message.images.length === 1
+          ? 'Sent a picture'
+          : `Sent ${message.images.length} pictures`
         : message.voice
           ? 'Sent a voice message'
           : message.sharedPost

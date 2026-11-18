@@ -32,6 +32,8 @@ import path from 'node:path';
 // 260 → 261 (R12, voice messages: the recorder, the encoder and the player are all lazy chat
 // code, but the shared schemas ride on the first paint, and the voice note's shape, the send
 // input's two new refinements and the upload limits are about 0.3 kB gz there; measured 260.1 kB).
+// R14 (several pictures in a chat message) left the budget alone: the pile and the strip are
+// lazy chat code, the send input's key list rides on the first paint; measured 260.4 kB.
 const BUDGET_KB = Number(process.env.BUNDLE_BUDGET_KB ?? 261);
 const dist = path.resolve(import.meta.dirname, '../dist');
 const html = readFileSync(path.join(dist, 'index.html'), 'utf8');

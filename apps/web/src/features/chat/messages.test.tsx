@@ -250,7 +250,7 @@ describe('messages', () => {
     const sendButton = screen.getByRole('button', { name: 'Send' });
     expect(sendButton).toBeDisabled();
     await user.upload(
-      screen.getByLabelText('Attach a picture'),
+      screen.getByLabelText('Attach pictures'),
       new File(['png'], 'photo.png', { type: 'image/png' }),
     );
     expect(await screen.findByRole('img', { name: 'Attachment preview' })).toBeInTheDocument();
@@ -279,7 +279,7 @@ describe('messages', () => {
     await waitFor(() =>
       expect(mockDb.messages.at(-1)).toMatchObject({
         content: '',
-        image: expect.objectContaining({ url: expect.stringContaining('/uploads/message/') }),
+        images: [expect.objectContaining({ url: expect.stringContaining('/uploads/message/') })],
       }),
     );
     await waitFor(() => expect(within(log).queryByText('Sending…')).not.toBeInTheDocument());

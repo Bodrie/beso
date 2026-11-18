@@ -45,3 +45,14 @@ export async function savePicture(url: string): Promise<void> {
     toast.error('Could not download the picture');
   }
 }
+
+/**
+ * Saves the pictures of one message, one after another in their order: a browser asks once
+ * whether the page may save several files, and the names come out in the order sent.
+ */
+export async function savePictures(urls: readonly string[]): Promise<void> {
+  for (const url of urls) {
+    // oxlint-disable-next-line no-await-in-loop -- one file at a time, on purpose
+    await savePicture(url);
+  }
+}

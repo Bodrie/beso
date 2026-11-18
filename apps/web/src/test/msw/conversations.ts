@@ -5,6 +5,7 @@ import {
   editMessageSchema,
   GROUP_MAX_MEMBERS,
   type Message,
+  messageImageKeysOf,
   messageReactionInputSchema,
   renameGroupSchema,
   type Revision,
@@ -93,15 +94,19 @@ export function storeMessage(
   conversationId: string,
   senderId: string,
   content: string,
-  imageKey?: string,
+  imageKeys: readonly string[] = [],
   postId?: string,
   replyToId?: string,
   voice?: StoredVoice,
 ): Message {
-  const url = imageKey ? `http://localhost/api/v1/uploads/${imageKey}` : null;
+  const images = imageKeys.map((key) => ({
+    url: `http://localhost/api/v1/uploads/${key}`,
+    width: 64,
+    height: 64,
+  }));
   const original = replyToId ? mockDb.messages.find((m) => m.id === replyToId) : undefined;
   const message = makeMessage(conversationId, senderId, content, {
-    image: url ? { url, width: 64, height: 64 } : null,
+    images,
     voice: voice
       ? {
           url: `http://localhost/api/v1/uploads/${voice.key}`,
@@ -109,20 +114,20 @@ export function storeMessage(
           peaks: voice.peaks,
         }
       : null,
-    imageUrl: url,
     sharedPost: postId ? { id: postId } : null,
     replyTo: original
       ? {
           id: original.id,
           senderId: original.senderId,
           excerpt: original.content,
-          attachment: original.image
-            ? 'picture'
-            : original.voice
-              ? 'voice'
-              : original.sharedPost
-                ? 'post'
-                : null,
+          attachment:
+            original.images.length > 0
+              ? 'picture'
+              : original.voice
+                ? 'voice'
+                : original.sharedPost
+                  ? 'post'
+                  : null,
           deleted: original.deletedAt !== null,
         }
       : null,
@@ -302,9 +307,8 @@ export const conversationHandlers = [
     if (message.deletedAt === null) {
       message.deletedAt = new Date().toISOString();
       message.content = '';
-      message.image = null;
+      message.images = [];
       message.voice = null;
-      message.imageUrl = null;
       message.sharedPost = null;
       message.replyTo = null;
     }
@@ -327,7 +331,7 @@ export const conversationHandlers = [
       row.id,
       mockDb.user.id,
       body.content,
-      body.imageKey,
+      messageImageKeysOf(body),
       body.postId,
       body.replyToId,
       body.voiceKey ? { key: body.voiceKey, peaks: body.voicePeaks ?? [] } : undefined,

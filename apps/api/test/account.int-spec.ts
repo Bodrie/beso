@@ -145,7 +145,7 @@ describe('DELETE /users/me', () => {
     const sent = await uploadPicture(agent, 'message');
     await agent
       .post(`/api/v1/conversations/${group.id}/messages`)
-      .send({ content: 'with a picture', imageKey: sent })
+      .send({ content: 'with a picture', imageKeys: [sent] })
       .expect(201);
     await agent.post(`/api/v1/conversations/${group.id}/messages`).send({ content: 'newest' });
     const solo = conversationSchema.parse(
@@ -280,7 +280,11 @@ describe('GET /users/me/export', () => {
     const direct = conversationSchema.parse(
       (await agent.put(`/api/v1/conversations/direct/${friend.id}`).expect(200)).body,
     );
-    await agent.post(`/api/v1/conversations/${direct.id}/messages`).send({ content: 'sent' });
+    const pictures = [await uploadPicture(agent, 'message'), await uploadPicture(agent, 'message')];
+    await agent
+      .post(`/api/v1/conversations/${direct.id}/messages`)
+      .send({ content: 'sent', imageKeys: pictures })
+      .expect(201);
     await friendAgent
       .post(`/api/v1/conversations/${direct.id}/messages`)
       .send({ content: 'received' });
@@ -307,7 +311,11 @@ describe('GET /users/me/export', () => {
     // Only my own messages, with the conversation they belong to.
     expect(data.messages.map((message) => message.content)).toEqual(['sent']);
     expect(data.messages[0]?.conversationId).toBe(direct.id);
-    expect(data.uploads.map((upload) => upload.key)).toEqual([key]);
+    // Every picture of a message, in its order.
+    expect(data.messages[0]?.imageUrls).toEqual(
+      pictures.map((picture) => expect.stringContaining(picture)),
+    );
+    expect(data.uploads.map((upload) => upload.key)).toEqual([key, ...pictures]);
 
     await agent.get('/api/v1/users/me/export').expect(200);
     const limited = await agent.get('/api/v1/users/me/export').expect(429);

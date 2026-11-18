@@ -247,6 +247,10 @@ test.describe('accessibility (signed in)', () => {
     await openHome(page);
     await page.goto('/messages/with/bob');
     await expect(page.getByRole('log', { name: 'Conversation with Bob Brown' })).toBeVisible();
+    // The seeded thread has a message with three pictures: the pile is part of the audit.
+    await expect(
+      page.getByRole('button', { name: 'Open 3 pictures sent by you' }).first(),
+    ).toBeVisible();
     await audit(page, '/messages (direct)');
     await page.getByRole('button', { name: 'New message' }).click();
     await expect(page.getByRole('dialog', { name: 'New message' })).toBeVisible();

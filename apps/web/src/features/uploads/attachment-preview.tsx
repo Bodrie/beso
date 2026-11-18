@@ -1,5 +1,5 @@
 import { cn } from 'cn';
-import { Loader2Icon, XIcon } from 'lucide-react';
+import { Loader2Icon, RotateCwIcon, XIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { ImageUploadState } from './use-image-upload';
 
@@ -9,6 +9,8 @@ type AttachmentPreviewProps = {
   onRemove: () => void;
   /** Numbers the preview and its buttons when a composer holds several (1-based). */
   position?: number;
+  /** A thumbnail in a strip: a failure shows as a retry button over it, the reason as its title. */
+  compact?: boolean;
   className?: string;
   imageClassName?: string;
 };
@@ -19,6 +21,7 @@ export function AttachmentPreview({
   onRetry,
   onRemove,
   position,
+  compact = false,
   className,
   imageClassName,
 }: AttachmentPreviewProps) {
@@ -36,11 +39,29 @@ export function AttachmentPreview({
       />
       {state.status === 'uploading' ? (
         <div className="bg-background/40 absolute inset-0 flex items-center justify-center">
-          <Loader2Icon className="size-6 animate-spin" aria-hidden="true" />
+          <Loader2Icon
+            className={cn('animate-spin', compact ? 'size-5' : 'size-6')}
+            aria-hidden="true"
+          />
           <span className="sr-only">Uploading image{suffix}</span>
         </div>
       ) : null}
-      {state.status === 'error' ? (
+      {state.status === 'error' && compact ? (
+        <div className="bg-background/70 absolute inset-0 flex items-end justify-center pb-1.5">
+          <Button
+            type="button"
+            size="xs"
+            variant="destructive"
+            title={state.message}
+            onClick={onRetry}
+          >
+            <RotateCwIcon />
+            Retry<span className="sr-only">{suffix}</span>
+          </Button>
+          <span className="sr-only">{state.message}</span>
+        </div>
+      ) : null}
+      {state.status === 'error' && !compact ? (
         <div className="bg-destructive absolute inset-x-0 bottom-0 flex items-center justify-between gap-3 px-3 py-2 text-sm text-white">
           <span>{state.message}</span>
           <Button type="button" size="xs" variant="secondary" onClick={onRetry}>
@@ -52,7 +73,7 @@ export function AttachmentPreview({
         type="button"
         variant="secondary"
         size="icon-xs"
-        className="absolute top-2 right-2 rounded-full shadow"
+        className={cn('absolute rounded-full shadow', compact ? 'top-1 right-1' : 'top-2 right-2')}
         aria-label={`Remove image${suffix}`}
         onClick={onRemove}
       >

@@ -84,7 +84,7 @@ export const accountExportSchema = z.object({
       conversationId: z.uuid(),
       conversationTitle: z.string().nullable(),
       content: z.string(),
-      imageUrl: z.string().nullable(),
+      imageUrls: z.array(z.string()),
       /** The file of a voice message (ADR 0009 amendment "voice messages"). */
       voiceUrl: z.string().nullable(),
       /** A post sent along (ADR 0009 amendment 4); null once that post is gone. */

@@ -9,7 +9,7 @@ import { playMessageSound } from '@/lib/notification-sound';
 import { queryKeys } from '@/lib/query-keys';
 import { useChat } from './chat-context';
 import {
-  attachmentWord,
+  attachmentPhrase,
   conversationName,
   memberById,
   messagePreview,
@@ -64,7 +64,7 @@ export default function MessageAlerts() {
             : sender;
         const body = conversation
           ? messagePreview(message, conversation, me.id)
-          : message.content || `Sent a ${attachmentWord(message).toLowerCase()}`;
+          : message.content || `Sent ${attachmentPhrase(message)}`;
         try {
           // One notification per conversation: a newer message replaces the older one.
           const notification = new Notification(title, { body, tag: message.conversationId });

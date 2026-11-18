@@ -9,14 +9,16 @@ export type ImageUploadItem = Exclude<ImageUploadState, { status: 'idle' }> & { 
 let nextId = 0;
 
 /**
- * `useImageUpload` for several pictures at once (the post composer, D2): each file uploads as
- * soon as it is chosen, with its own preview, progress and retry, up to `max`. The caller
- * submits the keys once every item is `ready`.
+ * `useImageUpload` for several pictures at once (the post composer, D2, and the chat's): each
+ * file uploads as soon as it is chosen, with its own preview, progress and retry, up to `max`
+ * per `owner` ("post", "message": the word the refusal uses). The caller submits the keys once
+ * every item is `ready`.
  */
-export function useImageUploads(kind: ImageUploadKind, max: number) {
+export function useImageUploads(kind: ImageUploadKind, max: number, owner: string) {
   const [items, setItems] = useState<ImageUploadItem[]>([]);
   const controllers = useRef(new Map<string, AbortController>());
   const previews = useRef(new Map<string, string>());
+  const tooMany = `At most ${max} pictures per ${owner}.`;
 
   const release = useCallback((id: string) => {
     controllers.current.get(id)?.abort();
@@ -63,10 +65,9 @@ export function useImageUploads(kind: ImageUploadKind, max: number) {
       const room = max - items.length;
       const accepted: File[] = [];
       for (const file of files) {
-        const reason = describeImageProblem(file);
+        const reason = describeImageProblem(file) ?? (accepted.length < room ? null : tooMany);
         if (reason) problem ??= reason;
-        else if (accepted.length < room) accepted.push(file);
-        else problem ??= `At most ${max} pictures per post.`;
+        else accepted.push(file);
       }
       const added = accepted.map((file) => {
         nextId += 1;
@@ -87,7 +88,7 @@ export function useImageUploads(kind: ImageUploadKind, max: number) {
       for (const { id, file, previewUrl } of added) start(id, file, previewUrl);
       return problem;
     },
-    [items.length, max, start],
+    [items.length, max, tooMany, start],
   );
 
   const retry = useCallback(
@@ -111,6 +112,17 @@ export function useImageUploads(kind: ImageUploadKind, max: number) {
     setItems([]);
   }, [release]);
 
+  /**
+   * Empty again without revoking the previews of the finished uploads: the caller owns those
+   * object URLs from here (the chat shows them in the optimistic bubble) and revokes them when
+   * done with them.
+   */
+  const handOver = useCallback(() => {
+    controllers.current.clear();
+    previews.current.clear();
+    setItems([]);
+  }, []);
+
   useEffect(() => {
     const ids = previews.current;
     return () => {
@@ -118,5 +130,5 @@ export function useImageUploads(kind: ImageUploadKind, max: number) {
     };
   }, [release]);
 
-  return { items, add, retry, remove, clear };
+  return { items, add, retry, remove, clear, handOver };
 }

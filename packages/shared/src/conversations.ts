@@ -15,6 +15,8 @@ import {
 import { userSummarySchema } from './users.js';
 
 export const MESSAGE_MAX_LENGTH = 2000;
+/** Pictures one message can carry (ADR 0009 amendment "several pictures"). */
+export const MESSAGE_MAX_IMAGES = 10;
 export const GROUP_TITLE_MAX_LENGTH = 60;
 /** Members per group, the creator included. */
 export const GROUP_MAX_MEMBERS = 50;
@@ -116,8 +118,11 @@ export const messageSchema = z.object({
   senderId: z.uuid(),
   /** `system` lines are written by the server about membership changes and renames. */
   kind: messageKindSchema,
-  /** Empty when the message is a picture, a post or a voice message only, a system line or deleted. */
+  /** Empty when the message is pictures, a post or a voice message only, a system line or deleted. */
   content: z.string(),
+  /** In the order the sender attached them, at most `MESSAGE_MAX_IMAGES`; empty once deleted. */
+  images: z.array(storedImageSchema),
+  /** @deprecated The first of `images`, kept for tabs opened before a message took several. */
   image: storedImageSchema.nullable(),
   /** A voice message; it carries no text, picture or post, and is null once deleted. */
   voice: voiceNoteSchema.nullable(),
@@ -125,7 +130,7 @@ export const messageSchema = z.object({
   sharedPost: sharedPostRefSchema.nullable(),
   /** The message this one answers; null when it answers none, and once it is deleted. */
   replyTo: replyRefSchema.nullable(),
-  /** @deprecated `image.url`, kept for tabs opened before D2 (they parse the old shape). */
+  /** @deprecated The first picture's URL, kept for tabs opened before D2 (they parse the old shape). */
   imageUrl: z.url().nullable(),
   /** Null until the sender edited the text; the previous texts are its revisions. */
   editedAt: z.iso.datetime().nullable(),
@@ -142,8 +147,14 @@ export type Message = z.infer<typeof messageSchema>;
 export const messageListSchema = paginatedSchema(messageSchema);
 export type MessageList = z.infer<typeof messageListSchema>;
 
+/** The picture keys of a send input, whichever of the two fields carried them. */
+export const messageImageKeysOf = (input: {
+  imageKeys?: readonly string[];
+  imageKey?: string;
+}): readonly string[] => input.imageKeys ?? (input.imageKey === undefined ? [] : [input.imageKey]);
+
 /**
- * Text, a picture, a post or any of them together; or a voice message on its own (it may still
+ * Text, pictures, a post or any of them together; or a voice message on its own (it may still
  * answer another message); never none.
  */
 export const sendMessageSchema = z
@@ -153,6 +164,13 @@ export const sendMessageSchema = z
       .trim()
       .max(MESSAGE_MAX_LENGTH, `At most ${MESSAGE_MAX_LENGTH} characters`)
       .default(''),
+    /** The sender's own uploads of kind `message`, shown in this order. */
+    imageKeys: z
+      .array(messageImageKeySchema)
+      .max(MESSAGE_MAX_IMAGES, `At most ${MESSAGE_MAX_IMAGES} pictures`)
+      .refine((keys) => new Set(keys).size === keys.length, 'Each picture only once')
+      .optional(),
+    /** @deprecated One picture, the way tabs opened before `imageKeys` send it; `imageKeys` wins. */
     imageKey: messageImageKeySchema.optional(),
     /** A post to send to the chat ("Send" on a post); the sender must be able to see it. */
     postId: uuidSchema.optional(),
@@ -166,7 +184,7 @@ export const sendMessageSchema = z
   .refine(
     (value) =>
       value.content.length > 0 ||
-      value.imageKey !== undefined ||
+      messageImageKeysOf(value).length > 0 ||
       value.postId !== undefined ||
       value.voiceKey !== undefined,
     { message: 'Write something or attach a picture', path: ['content'] },
@@ -174,7 +192,9 @@ export const sendMessageSchema = z
   .refine(
     (value) =>
       value.voiceKey === undefined ||
-      (value.content.length === 0 && value.imageKey === undefined && value.postId === undefined),
+      (value.content.length === 0 &&
+        messageImageKeysOf(value).length === 0 &&
+        value.postId === undefined),
     { message: 'A voice message carries nothing else', path: ['voiceKey'] },
   )
   .refine((value) => value.voicePeaks === undefined || value.voiceKey !== undefined, {
@@ -184,7 +204,7 @@ export const sendMessageSchema = z
 export type SendMessageInput = z.input<typeof sendMessageSchema>;
 export type SendMessageData = z.output<typeof sendMessageSchema>;
 
-/** The sender changes the text (the picture stays); an unchanged text is a no-op. */
+/** The sender changes the text (the pictures stay); an unchanged text is a no-op. */
 export const editMessageSchema = z.object({
   content: z
     .string()

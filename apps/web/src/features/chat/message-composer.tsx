@@ -1,4 +1,10 @@
-import { MESSAGE_MAX_LENGTH, type ReplyRef, UPLOAD_LIMITS, type VoiceNote } from '@beso/shared';
+import {
+  MESSAGE_MAX_IMAGES,
+  MESSAGE_MAX_LENGTH,
+  type ReplyRef,
+  UPLOAD_LIMITS,
+  type VoiceNote,
+} from '@beso/shared';
 import { ImageIcon, MicIcon, ReplyIcon, SendIcon, XIcon } from 'lucide-react';
 import {
   type ChangeEvent,
@@ -17,21 +23,28 @@ import { Textarea } from '@/components/ui/textarea';
 import { EmojiPickerButton } from '@/features/emoji/emoji-picker-button';
 import { insertText } from '@/features/posts/insert-text';
 import { AttachmentPreview } from '@/features/uploads/attachment-preview';
-import { useImageUpload } from '@/features/uploads/use-image-upload';
+import { useImageUploads } from '@/features/uploads/use-image-uploads';
 import { focusLater } from '@/lib/focus';
 import { useTypingSignal } from './use-typing-signal';
 import { useVoiceRecorder } from './voice/use-voice-recorder';
 import { RecordingBar, VoicePreview } from './voice/voice-composer';
 import { canRecordVoice } from './voice/voice-recorder';
 
-/** What the composer hands over: text, an uploaded picture, or both; or a voice message alone. */
+/** An uploaded picture on its way out, with what the optimistic bubble shows meanwhile. */
+export type OutgoingPicture = {
+  key: string;
+  /** Local object URL of the picture; the receiver revokes it. */
+  previewUrl: string;
+  /** The uploaded picture's size, so the optimistic bubble already has its final shape. */
+  width: number | null;
+  height: number | null;
+};
+
+/** What the composer hands over: text, uploaded pictures, or both; or a voice message alone. */
 export type OutgoingMessage = {
   content: string;
-  imageKey?: string;
-  /** Local object URL of the picture, for the optimistic bubble; the receiver revokes it. */
-  previewUrl?: string;
-  /** The uploaded picture's size, so the optimistic bubble already has its final shape. */
-  previewSize?: { width: number | null; height: number | null };
+  /** In the order they were chosen, at most `MESSAGE_MAX_IMAGES`. */
+  images?: OutgoingPicture[];
   /** An uploaded voice message (no text, no picture with it). */
   voiceKey?: string;
   /** The clip as the optimistic bubble plays it: a local object URL the receiver revokes. */
@@ -71,23 +84,37 @@ export function MessageComposer({
     if (replyingToId) focusLater(textareaRef);
   }, [replyingToId]);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const image = useImageUpload('message');
+  const pictures = useImageUploads('message', MESSAGE_MAX_IMAGES, 'message');
   const voice = useVoiceRecorder();
   const canRecord = useMemo(() => canRecordVoice(), []);
   const typing = useTypingSignal((isTyping) => onTyping?.(isTyping));
 
   const trimmed = content.trim();
   const remaining = MESSAGE_MAX_LENGTH - content.length;
-  const pictureReady = image.state.status === 'ready';
-  const pictureBusy = image.state.status === 'uploading' || image.state.status === 'error';
+  const attached = pictures.items.length;
+  const ready = pictures.items.flatMap((item): OutgoingPicture[] =>
+    item.status === 'ready'
+      ? [
+          {
+            key: item.upload.key,
+            previewUrl: item.previewUrl,
+            width: item.upload.width,
+            height: item.upload.height,
+          },
+        ]
+      : [],
+  );
+  // One still uploading or failed holds the message back: it goes with all of them or after
+  // the failed one was retried or removed.
+  const picturesBusy = ready.length < attached;
   const voiceState = voice.state;
   const voiceReady = voiceState.status === 'ready';
   const canSend = voiceReady
     ? !disabled
     : voiceState.status === 'idle' &&
-      (trimmed.length > 0 || pictureReady) &&
+      (trimmed.length > 0 || attached > 0) &&
       remaining >= 0 &&
-      !pictureBusy &&
+      !picturesBusy &&
       !disabled;
 
   const send = () => {
@@ -107,16 +134,11 @@ export function MessageComposer({
       voice.handOver();
       return;
     }
-    if (image.state.status === 'ready') {
-      onSend({
-        content: trimmed,
-        imageKey: image.state.upload.key,
-        previewUrl: image.state.previewUrl,
-        previewSize: { width: image.state.upload.width, height: image.state.upload.height },
-      });
-      // The thread's optimistic bubble shows the preview from here on and revokes it once the
-      // message is confirmed; revoking it now would break the bubble before it renders.
-      image.handOver();
+    if (ready.length > 0) {
+      onSend({ content: trimmed, images: ready });
+      // The thread's optimistic bubble shows the previews from here on and revokes them once
+      // the message is confirmed; revoking them now would break the bubble before it renders.
+      pictures.handOver();
     } else {
       onSend({ content: trimmed });
     }
@@ -147,11 +169,11 @@ export function MessageComposer({
     }
   };
 
-  const pickFile = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+  const pickFiles = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = [...(event.target.files ?? [])];
     event.target.value = '';
-    if (!file) return;
-    const problem = image.select(file);
+    if (files.length === 0) return;
+    const problem = pictures.add(files);
     if (problem) toast.error(problem);
   };
 
@@ -194,14 +216,38 @@ export function MessageComposer({
           </Button>
         </div>
       ) : null}
-      {image.state.status !== 'idle' ? (
-        <AttachmentPreview
-          state={image.state}
-          onRetry={image.retry}
-          onRemove={image.clear}
-          className="mb-2 w-fit max-w-full"
-          imageClassName="max-h-40 w-auto max-w-full"
-        />
+      {pictures.items.length === 1 ? (
+        pictures.items.map((item) => (
+          <AttachmentPreview
+            key={item.id}
+            state={item}
+            onRetry={() => pictures.retry(item.id)}
+            onRemove={() => pictures.remove(item.id)}
+            className="mb-2 w-fit max-w-full"
+            imageClassName="max-h-40 w-auto max-w-full"
+          />
+        ))
+      ) : attached > 1 ? (
+        // Several: a strip of thumbnails in the order they go out, scrolled sideways when the
+        // row is too narrow for them (the remove buttons take the keyboard along).
+        <ul
+          aria-label={`${attached} pictures to send`}
+          className="mb-2 flex gap-2 overflow-x-auto overscroll-x-contain pb-1"
+        >
+          {pictures.items.map((item, index) => (
+            <li key={item.id} className="shrink-0">
+              <AttachmentPreview
+                state={item}
+                position={index + 1}
+                compact
+                onRetry={() => pictures.retry(item.id)}
+                onRemove={() => pictures.remove(item.id)}
+                className="size-20"
+                imageClassName="size-full max-h-none"
+              />
+            </li>
+          ))}
+        </ul>
       ) : null}
       {voiceState.status === 'starting' ||
       voiceState.status === 'recording' ||
@@ -219,19 +265,24 @@ export function MessageComposer({
           <input
             ref={fileInputRef}
             type="file"
+            multiple
             accept={UPLOAD_LIMITS.acceptedTypes.join(',')}
             className="sr-only"
-            aria-label="Attach a picture"
+            aria-label="Attach pictures"
             tabIndex={-1}
-            onChange={pickFile}
+            onChange={pickFiles}
           />
           <Button
             type="button"
             variant="ghost"
             size="icon-sm"
-            aria-label="Add picture"
+            aria-label={attached > 0 ? 'Add more pictures' : 'Add pictures'}
             disabled={disabled}
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() =>
+              attached >= MESSAGE_MAX_IMAGES
+                ? toast.error(`At most ${MESSAGE_MAX_IMAGES} pictures per message.`)
+                : fileInputRef.current?.click()
+            }
           >
             <ImageIcon />
           </Button>
@@ -254,8 +305,8 @@ export function MessageComposer({
               variant="ghost"
               size="icon-sm"
               aria-label="Record a voice message"
-              // A voice message goes alone, so not while a picture is attached.
-              disabled={disabled || image.state.status !== 'idle'}
+              // A voice message goes alone, so not while pictures are attached.
+              disabled={disabled || attached > 0}
               onClick={() => void voice.start()}
             >
               <MicIcon />

@@ -24,12 +24,12 @@ async function agentFor(t: TestApp, user: CreatedUser): Promise<TestAgent> {
   return agent;
 }
 
-async function uploadPicture(agent: TestAgent): Promise<string> {
+async function uploadPicture(agent: TestAgent, kind = 'post'): Promise<string> {
   const image = await sharp({ create: { width: 64, height: 64, channels: 3, background: '#333' } })
     .png()
     .toBuffer();
   const response = await agent
-    .post('/api/v1/uploads?kind=post')
+    .post(`/api/v1/uploads?kind=${kind}`)
     .attach('file', image, 'pic.png')
     .expect(201);
   return uploadResponseSchema.parse(response.body).key;
@@ -64,16 +64,27 @@ describe('daily jobs', () => {
     const attached = await uploadPicture(agent);
     const fresh = await uploadPicture(agent);
     await agent.post('/api/v1/posts').send({ content: 'with a picture', imageKeys: [attached] });
+    // Pictures sent in a chat message are attached too, the second of them as much as the first.
+    const sent = [await uploadPicture(agent, 'message'), await uploadPicture(agent, 'message')];
+    const unsent = await uploadPicture(agent, 'message');
+    const bob = await createUser(t.prisma);
+    const direct = await agent.put(`/api/v1/conversations/direct/${bob.id}`).expect(200);
+    await agent
+      .post(`/api/v1/conversations/${direct.body.id}/messages`)
+      .send({ imageKeys: sent })
+      .expect(201);
     await t.prisma.upload.updateMany({
-      where: { key: { in: [orphan, attached] } },
+      where: { key: { in: [orphan, attached, unsent, ...sent] } },
       data: { createdAt: ago(25 * HOUR) },
     });
 
     await jobs.runDaily(now);
 
     const rows = await t.prisma.upload.findMany({ where: { ownerId: alice.id } });
-    expect(rows.map((row) => row.key).toSorted()).toEqual([attached, fresh].toSorted());
+    expect(rows.map((row) => row.key).toSorted()).toEqual([attached, fresh, ...sent].toSorted());
     expect(existsSync(fileOf(orphan))).toBe(false);
+    expect(existsSync(fileOf(unsent))).toBe(false);
+    for (const key of sent) expect(existsSync(fileOf(key))).toBe(true);
     expect(existsSync(fileOf(attached))).toBe(true);
     expect(existsSync(fileOf(fresh))).toBe(true);
   });
